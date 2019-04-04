@@ -1,0 +1,12 @@
+{
+  "name": "line",
+  "version": "0.1.0",
+  "description": "Dead simple line chart.",
+  "main": "dist/index.js",
+  "scripts": {},
+  "author": "Chuang Yu <cyu9960@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.103.0"
+  }
+}
