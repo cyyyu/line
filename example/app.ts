@@ -8,5 +8,12 @@ for (let i = 1; i < 20; i++) {
 
 line({
   canvas: document.querySelector("canvas"),
-  data
+  data,
+  interactive: true,
+  onHover: value => {
+    document.querySelector("#val").textContent = value.toString();
+  },
+  onLeave: () => {
+    document.querySelector("#val").textContent = "";
+  }
 });
