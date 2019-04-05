@@ -1,5 +1,5 @@
 {
-  "name": "line",
+  "name": "simple-line-chart",
   "version": "0.1.0",
   "description": "Dead simple line chart.",
   "main": "dist/index.js",
