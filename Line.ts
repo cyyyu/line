@@ -2,9 +2,11 @@ import * as THREE from "three";
 import * as d3Scale from "d3-scale";
 import { max } from "./util";
 
+// Constants
 const lineColor = 0xdf0054;
 const dotColor = 0x480032;
 const overlayColor = 0xffece2;
+const verticalLineMeshName = "verticalLineMesh";
 
 export interface Options {
   canvas: HTMLCanvasElement;
@@ -26,6 +28,7 @@ export default class Line {
     this.buildLine();
     this.buildDots();
     this.buildOverlay();
+    this.bindListener();
     this.draw();
   }
 
@@ -155,11 +158,70 @@ export default class Line {
     this.scene.add(mesh);
   }
 
+  private bindListener() {
+    const { canvas } = this.options;
+    canvas.addEventListener("mousemove", this.drawVerticalLine.bind(this));
+    canvas.addEventListener("mouseleave", this.removeVerticalLine.bind(this));
+  }
+
+  private drawVerticalLine(e: MouseEvent) {
+    const { data } = this.options;
+    const { offsetX } = e;
+    const xIndex = Math.round(this.xScale.invert(offsetX));
+    const x = this.xScale(xIndex);
+    const y = this.yScale(data[xIndex]);
+
+    const verticalLineMesh = new THREE.Object3D();
+    verticalLineMesh.name = verticalLineMeshName;
+
+    // Line
+    const Z = 2;
+    {
+      const geometry = new THREE.BufferGeometry();
+      geometry.addAttribute(
+        "position",
+        new THREE.Float32BufferAttribute([x, this.size.height, Z, x, 0, Z], 3)
+      );
+      geometry.computeBoundingSphere();
+      const material = new THREE.LineBasicMaterial({
+        color: new THREE.Color(lineColor)
+      });
+      const mesh = new THREE.Line(geometry, material);
+      verticalLineMesh.add(mesh);
+    }
+    // Dot
+    {
+      const geometry = new THREE.BufferGeometry();
+      geometry.addAttribute(
+        "position",
+        new THREE.Float32BufferAttribute([x, y, Z], 3)
+      );
+      geometry.computeBoundingSphere();
+      const material = new THREE.PointsMaterial({
+        color: new THREE.Color(dotColor),
+        size: 6 // Double size
+      });
+      const mesh = new THREE.Points(geometry, material);
+      verticalLineMesh.add(mesh);
+    }
+
+    this.removeVerticalLine();
+    this.scene.add(verticalLineMesh);
+    this.draw();
+  }
+
+  private removeVerticalLine() {
+    const prevLine = this.scene.getObjectByName(verticalLineMeshName);
+    if (prevLine) this.scene.remove(prevLine);
+    this.draw();
+  }
+
   private draw() {
     const { canvas } = this.options;
     this.renderer.render(this.scene, this.camera);
     const ctx = canvas.getContext("2d");
     if (ctx) {
+      ctx.clearRect(0, 0, this.size.width, this.size.height);
       ctx.drawImage(
         this.renderer.domElement,
         0,
