@@ -15,7 +15,10 @@ import line from "simple-line-chart";
 
 line({
   canvas: document.querySelector("canvas"),
-  data: [100, 200, 300, 200, 400, 100]
+  data: [100, 200, 300, 200, 400, 100],
+  interactive: true, // Optional
+  onHover: value => {}, // Optional. Require 'interactive' to be true
+  onLeave: () => {} // Optional. Require 'interactive' to be true
 });
 ```
 
