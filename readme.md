@@ -6,6 +6,10 @@ Dead simple line chart in webgl.
 
 <img src="./screenshot.png" width="280" />
 
+### Demo
+
+Please visit: [demo](https://cyyyu.github.io/projects/simple-line-chart/)
+
 ### Usage
 
 `npm install --save simple-line-chart`
