@@ -35,10 +35,11 @@ export default class Line {
       .scaleLinear()
       .domain([0, data.length - 1])
       .range([0, size.width]);
+    const maxVal = max(data);
     const yScale = d3Scale
       .scaleLinear()
-      .domain([0, max(data)])
-      .range([0, size.height]);
+      .domain([0, maxVal])
+      .range([0, size.height * 0.8]);
     const Z = 0;
 
     for (let i = 0, len = data.length; i < len; ++i) {
