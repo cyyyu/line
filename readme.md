@@ -1,5 +1,7 @@
 # Line
 
+[![npm version](https://badge.fury.io/js/simple-line-chart.svg)](https://badge.fury.io/js/simple-line-chart)
+
 Dead simple line chart in webgl.
 
 <img src="./screenshot.png" width="280" />
