@@ -4,7 +4,8 @@
   "description": "Dead simple line chart.",
   "main": "dist/index.js",
   "scripts": {
-    "example": "parcel serve example/index.html"
+    "example": "parcel serve example/index.html",
+    "build": "parcel build index.ts --out-dir dist"
   },
   "author": "Chuang Yu <cyu9960@gmail.com>",
   "license": "MIT",
