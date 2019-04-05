@@ -11,6 +11,9 @@ const verticalLineMeshName = "verticalLineMesh";
 export interface Options {
   canvas: HTMLCanvasElement;
   data: number[];
+  interactive?: boolean;
+  onHover?: (value: number) => void;
+  onLeave?: () => void;
 }
 
 export default class Line {
@@ -28,7 +31,7 @@ export default class Line {
     this.buildLine();
     this.buildDots();
     this.buildOverlay();
-    this.bindListener();
+    options.interactive && this.bindListener();
     this.draw();
   }
 
@@ -161,11 +164,11 @@ export default class Line {
   private bindListener() {
     const { canvas } = this.options;
     canvas.addEventListener("mousemove", this.drawVerticalLine.bind(this));
-    canvas.addEventListener("mouseleave", this.removeVerticalLine.bind(this));
+    canvas.addEventListener("mouseleave", this.onMouseLeave.bind(this));
   }
 
   private drawVerticalLine(e: MouseEvent) {
-    const { data } = this.options;
+    const { data, onHover } = this.options;
     const { offsetX } = e;
     const xIndex = Math.round(this.xScale.invert(offsetX));
     const x = this.xScale(xIndex);
@@ -208,6 +211,15 @@ export default class Line {
     this.removeVerticalLine();
     this.scene.add(verticalLineMesh);
     this.draw();
+
+    // Emit callback
+    onHover && onHover(data[xIndex]);
+  }
+
+  private onMouseLeave() {
+    const { onLeave } = this.options;
+    this.removeVerticalLine();
+    onLeave && onLeave();
   }
 
   private removeVerticalLine() {
