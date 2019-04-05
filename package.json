@@ -9,6 +9,10 @@
   },
   "author": "Chuang Yu <cyu9960@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cyyyu/line.git"
+  },
   "dependencies": {
     "d3-scale": "^3.0.0",
     "three": "^0.103.0"
