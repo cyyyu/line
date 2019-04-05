@@ -2,6 +2,10 @@ import * as THREE from "three";
 import * as d3Scale from "d3-scale";
 import { max } from "./util";
 
+const lineColor = 0xdf0054;
+const dotColor = 0x480032;
+const overlayColor = 0xffece2;
+
 export interface Options {
   canvas: HTMLCanvasElement;
   data: number[];
@@ -44,7 +48,7 @@ export default class Line {
     this.xScale = d3Scale
       .scaleLinear()
       .domain([0, data.length - 1])
-      .range([6, this.size.width - 6]);
+      .range([0, this.size.width]);
     const maxVal = max(data);
     this.yScale = d3Scale
       .scaleLinear()
@@ -68,7 +72,7 @@ export default class Line {
     );
     geometry.computeBoundingSphere();
     const material = new THREE.LineBasicMaterial({
-      color: new THREE.Color(0xe42134)
+      color: new THREE.Color(lineColor)
     });
     const mesh = new THREE.Line(geometry, material);
     this.scene.add(mesh);
@@ -91,8 +95,8 @@ export default class Line {
     );
     geometry.computeBoundingSphere();
     const material = new THREE.PointsMaterial({
-      color: new THREE.Color(0xff0000),
-      size: 4
+      color: new THREE.Color(dotColor),
+      size: 3
     });
     const mesh = new THREE.Points(geometry, material);
     this.scene.add(mesh);
@@ -143,7 +147,7 @@ export default class Line {
       new THREE.Float32BufferAttribute(vertices, 3)
     );
     const material = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(0xffccd0),
+      color: new THREE.Color(overlayColor),
       side: THREE.DoubleSide
     });
     const mesh = new THREE.Mesh(geometry, material);
