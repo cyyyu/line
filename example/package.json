@@ -1,0 +1,10 @@
+{
+  "name": "simple-line-chart-example",
+  "version": "1.0.0",
+  "description": "simple-line-chart-example",
+  "scripts": {
+    "start": "parcel serve index.html"
+  },
+  "author": "Chuang Yu <cyu9960@gmail.com>",
+  "license": "MIT"
+}
