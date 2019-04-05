@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "description": "Dead simple line chart.",
   "main": "dist/index.js",
-  "scripts": {},
+  "scripts": {
+    "example": "parcel serve example/index.html"
+  },
   "author": "Chuang Yu <cyu9960@gmail.com>",
   "license": "MIT",
   "dependencies": {
@@ -12,6 +14,7 @@
   },
   "devDependencies": {
     "@types/d3-scale": "^2.1.1",
+    "parcel-bundler": "^1.12.3",
     "typescript": "^3.4.1"
   }
 }
