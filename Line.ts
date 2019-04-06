@@ -208,7 +208,7 @@ export default class Line {
       geometry.computeBoundingSphere();
       const material = new THREE.PointsMaterial({
         color: new THREE.Color(dotColor),
-        size: 6 // Double size
+        size: 12 // Double size
       });
       const mesh = new THREE.Points(geometry, material);
       verticalLineMesh.add(mesh);
