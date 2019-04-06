@@ -21,7 +21,7 @@ export default class Line {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.OrthographicCamera;
-  private size: ClientRect;
+  private size: { width: number; height: number };
   private xScale: d3Scale.ScaleLinear<number, number>;
   private yScale: d3Scale.ScaleLinear<number, number>;
 
@@ -40,7 +40,8 @@ export default class Line {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xffffff);
-    this.size = canvas.getBoundingClientRect();
+    const size = canvas.getBoundingClientRect();
+    this.size = { width: size.width * 2, height: size.height * 2 };
     this.renderer.setSize(this.size.width, this.size.height);
     this.camera = new THREE.OrthographicCamera(
       0,
@@ -60,6 +61,11 @@ export default class Line {
       .scaleLinear()
       .domain([0, maxVal])
       .range([0, this.size.height * 0.8]);
+
+    canvas.width = this.size.width;
+    canvas.height = this.size.height;
+    canvas.style.width = size.width + "px";
+    canvas.style.height = size.height + "px";
   }
 
   private buildLine() {
@@ -102,7 +108,7 @@ export default class Line {
     geometry.computeBoundingSphere();
     const material = new THREE.PointsMaterial({
       color: new THREE.Color(dotColor),
-      size: 3
+      size: 6
     });
     const mesh = new THREE.Points(geometry, material);
     this.scene.add(mesh);
@@ -170,7 +176,7 @@ export default class Line {
   private drawVerticalLine(e: MouseEvent) {
     const { data, onHover } = this.options;
     const { offsetX } = e;
-    const xIndex = Math.round(this.xScale.invert(offsetX));
+    const xIndex = Math.round(this.xScale.invert(offsetX * 2));
     const x = this.xScale(xIndex);
     const y = this.yScale(data[xIndex]);
 
