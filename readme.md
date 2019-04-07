@@ -8,11 +8,11 @@ Dead simple line chart in webgl.
 
 ### Highlights
 
-- Due to limitations of the OpenGL Core Profile on most platforms, the maximun line width is not constant(mostly is 1.0). So instead of drawing lines on webgl, use triangles to simulate the line and render them as regular buffergeometries.
+- Due to limitations of the OpenGL Core Profile on most platforms, the maximun line width is not constant(mostly is 1.0). So instead of drawing lines, use triangles to simulate the line and render them as regular buffergeometries.
 
 <img src="./imgs/line-wireframe.png" width="400" />
 
-- To improve 2D canvas resolution by setting its display size 4x as the size of its drawing buffer. The result looks really promising as a avg chart.
+- To improve 2D canvas resolution by setting its display size 4x as the size of its drawing buffer. The result looks really promising as it's rendered with svg.
 
 ### Demo
 
