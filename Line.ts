@@ -17,6 +17,10 @@ export interface Options {
   onLeave?: () => void;
 }
 
+const DefaultOptions: Partial<Options> = {
+  interactive: true
+};
+
 export default class Line {
   private options: Options;
   private renderer: THREE.WebGLRenderer;
@@ -27,12 +31,12 @@ export default class Line {
   private yScale: d3Scale.ScaleLinear<number, number>;
 
   constructor(options: Options) {
-    this.options = options;
+    this.options = Object.assign(DefaultOptions, options);
     this.initContext();
     this.buildLine();
     this.buildDots();
     this.buildOverlay();
-    options.interactive && this.bindListener();
+    this.options.interactive && this.bindListener();
     this.draw();
   }
 
