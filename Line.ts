@@ -1,13 +1,15 @@
 import * as THREE from "three";
 import * as d3Scale from "d3-scale";
-import { max } from "./util";
+import { max, LTD } from "./util";
 
 // Constants
 const lineColor = 0xdf0054;
+const activeLineColor = 0x000000;
 const dotColor = 0x480032;
 const overlayColor = 0xffece2;
 const verticalLineMeshName = "verticalLineMesh";
-const lineWidth = 10;
+const lineWidth = 5;
+const resolution = 2; // like 2x zoomed out
 
 export interface Options {
   canvas: HTMLCanvasElement;
@@ -15,10 +17,12 @@ export interface Options {
   interactive?: boolean;
   onHover?: (value: number) => void;
   onLeave?: () => void;
+  downsample?: boolean;
 }
 
 const DefaultOptions: Partial<Options> = {
-  interactive: true
+  interactive: true,
+  downsample: true
 };
 
 export default class Line {
@@ -26,28 +30,45 @@ export default class Line {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.OrthographicCamera;
-  private size: { width: number; height: number };
+  private size: { width: number; height: number }; // Actual size of rendering
   private xScale: d3Scale.ScaleLinear<number, number>;
   private yScale: d3Scale.ScaleLinear<number, number>;
+  private data: Options["data"];
 
   constructor(options: Options) {
+    const { data, canvas } = options;
+
     this.options = Object.assign({}, DefaultOptions, options);
+
+    this.data = this.options.downsample
+      ? LTD(data, this.calThreshold(data))
+      : this.options.data;
+
+    const size = canvas.getBoundingClientRect();
+    this.size = {
+      width: size.width * resolution,
+      height: size.height * resolution
+    };
+    canvas.width = this.size.width;
+    canvas.height = this.size.height;
+    canvas.style.width = size.width + "px";
+    canvas.style.height = size.height + "px";
 
     this.initContext();
     this.buildLine();
-    this.buildDots();
     this.buildOverlay();
     this.options.interactive && this.bindListener();
     this.draw();
   }
 
+  private calThreshold(data: Options["data"]) {
+    return 100;
+  }
+
   private initContext() {
-    const { canvas, data } = this.options;
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xffffff);
-    const size = canvas.getBoundingClientRect();
-    this.size = { width: size.width * 4, height: size.height * 4 };
     this.renderer.setSize(this.size.width, this.size.height);
     this.camera = new THREE.OrthographicCamera(
       0,
@@ -60,22 +81,16 @@ export default class Line {
     this.camera.position.z = 20;
     this.xScale = d3Scale
       .scaleLinear()
-      .domain([0, data.length - 1])
+      .domain([0, this.data.length - 1])
       .range([0, this.size.width]);
-    const maxVal = max(data);
+    const maxVal = max(this.data);
     this.yScale = d3Scale
       .scaleLinear()
       .domain([0, maxVal])
       .range([0, this.size.height * 0.8]);
-
-    canvas.width = this.size.width;
-    canvas.height = this.size.height;
-    canvas.style.width = size.width + "px";
-    canvas.style.height = size.height + "px";
   }
 
   private buildLine() {
-    const { data } = this.options;
     const geometry = new THREE.BufferGeometry();
     const vertices = [];
 
@@ -84,7 +99,7 @@ export default class Line {
     const halfLineWidth = lineWidth / 2;
 
     const firstPointX = this.xScale(0);
-    const firstPointY = this.yScale(data[0]);
+    const firstPointY = this.yScale(this.data[0]);
     let tempPrePoint12 = [
       [firstPointX, firstPointY - halfLineWidth],
       [firstPointX, firstPointY + halfLineWidth]
@@ -94,11 +109,11 @@ export default class Line {
     // Drawing rectangles like:
     // 1 2 4
     // 0 3 5
-    for (let i = 1, len = data.length; i < len; ++i) {
+    for (let i = 1, len = this.data.length; i < len; ++i) {
       const preX = this.xScale(i - 1);
-      const preY = this.yScale(data[i - 1]);
+      const preY = this.yScale(this.data[i - 1]);
       const curX = this.xScale(i);
-      const curY = this.yScale(data[i]);
+      const curY = this.yScale(this.data[i]);
 
       let x0: number,
         y0: number,
@@ -118,7 +133,7 @@ export default class Line {
       // Not last point
       if (i !== len - 1) {
         const nexX = this.xScale(i + 1);
-        const nexY = this.yScale(data[i + 1]);
+        const nexY = this.yScale(this.data[i + 1]);
 
         // line segment from point 1 to 2
         k1 = (curY - preY) / (curX - preX);
@@ -196,42 +211,17 @@ export default class Line {
     this.scene.add(mesh);
   }
 
-  private buildDots() {
-    const { data } = this.options;
-    const geometry = new THREE.BufferGeometry();
-    const positions = [];
-
-    const Z = 1;
-
-    for (let i = 0, len = data.length; i < len; ++i) {
-      positions.push(this.xScale(i), this.yScale(data[i]), Z);
-    }
-
-    geometry.addAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(positions, 3)
-    );
-    geometry.computeBoundingSphere();
-    const material = new THREE.PointsMaterial({
-      color: new THREE.Color(dotColor),
-      size: 24
-    });
-    const mesh = new THREE.Points(geometry, material);
-    this.scene.add(mesh);
-  }
-
   private buildOverlay() {
-    const { data } = this.options;
     const geometry = new THREE.BufferGeometry();
     const vertices = [];
 
     const Z = -1;
 
-    for (let i = 1, len = data.length; i < len; ++i) {
+    for (let i = 1, len = this.data.length; i < len; ++i) {
       const preX = this.xScale(i - 1);
-      const preY = this.yScale(data[i - 1]);
+      const preY = this.yScale(this.data[i - 1]);
       const curX = this.xScale(i);
-      const curY = this.yScale(data[i]);
+      const curY = this.yScale(this.data[i]);
       vertices.push(
         // 0
         preX,
@@ -280,11 +270,11 @@ export default class Line {
   }
 
   private drawVerticalLine(e: MouseEvent) {
-    const { data, onHover } = this.options;
+    const { onHover } = this.options;
     const { offsetX } = e;
-    const xIndex = Math.round(this.xScale.invert(offsetX * 4));
+    const xIndex = Math.round(this.xScale.invert(offsetX * resolution));
     const x = this.xScale(xIndex);
-    const y = this.yScale(data[xIndex]);
+    const y = this.yScale(this.data[xIndex]);
 
     const verticalLineMesh = new THREE.Object3D();
     verticalLineMesh.name = verticalLineMeshName;
@@ -320,7 +310,7 @@ export default class Line {
       );
       geometry.computeBoundingSphere();
       const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(lineColor),
+        color: new THREE.Color(activeLineColor),
         side: THREE.DoubleSide
       });
       const mesh = new THREE.Mesh(geometry, material);
@@ -336,7 +326,7 @@ export default class Line {
       geometry.computeBoundingSphere();
       const material = new THREE.PointsMaterial({
         color: new THREE.Color(dotColor),
-        size: 36
+        size: 18
       });
       const mesh = new THREE.Points(geometry, material);
       verticalLineMesh.add(mesh);
@@ -347,7 +337,7 @@ export default class Line {
     this.draw();
 
     // Emit callback
-    onHover && onHover(data[xIndex]);
+    onHover && onHover(this.data[xIndex]);
   }
 
   private onMouseLeave() {

@@ -12,7 +12,7 @@ Dead simple line chart in webgl.
 
 <img src="./imgs/line-wireframe.png" width="400" />
 
-- To improve 2D canvas resolution by setting its display size 4x as the size of its drawing buffer. The result looks really promising as it's rendered with svg.
+- To improve 2D canvas resolution by setting its display size 2x as the size of its drawing buffer. That removes a lots jagged edges(aka aliasing) from the result.
 
 ### Demo
 

@@ -6,3 +6,10 @@ export function max(data: number[]): number {
   }
   return re;
 }
+
+// Largest triangles dynamic data dowmsampling algorithm
+// Based on Sveinn Steinarsson's 2013 paper: https://skemman.is/bitstream/1946/15343/3/SS_MSthesis.pdf
+export function LTD(data: number[], threshold: number): number[] {
+  // Todo
+  return data;
+}
