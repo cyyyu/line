@@ -13,11 +13,13 @@ With npm: `npm install --save simple-line-chart`
 ## Simple Example
 
 Html(Require a 'width' and 'height'. You could set it with JavaScript):
+
 ```
 <canvas width="600" height="320"></canvas>
 ```
 
 JavaScript:
+
 ```
 import line from "simple-line-chart";
 
@@ -73,7 +75,7 @@ line({
 ### Data Downsampling
 
 To turn off the optimization and get the original visualisation, you could set `downsample: false`.
-On the other hand, if you don't set it to `downsample: true`(this is the default option), instead set a number for it, you are setting the threahold you expect from the output.  
+On the other hand, if you don't set it to `downsample: true`(this is the default option), instead set a number for it, you are setting the threahold you expect from the output.
 
 For example:
 
