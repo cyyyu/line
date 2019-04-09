@@ -31,7 +31,8 @@ export default class Line {
   private yScale: d3Scale.ScaleLinear<number, number>;
 
   constructor(options: Options) {
-    this.options = Object.assign(DefaultOptions, options);
+    this.options = Object.assign({}, DefaultOptions, options);
+
     this.initContext();
     this.buildLine();
     this.buildDots();
