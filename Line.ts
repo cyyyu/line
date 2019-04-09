@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import * as d3Scale from "d3-scale";
-import { max, LTD } from "./util";
+import { max, LTTB } from "./util";
 
 // Constants
 const lineColor = 0xdf0054;
@@ -8,7 +8,7 @@ const activeLineColor = 0x000000;
 const dotColor = 0x480032;
 const overlayColor = 0xffece2;
 const verticalLineMeshName = "verticalLineMesh";
-const lineWidth = 5;
+const lineWidth = 4;
 const resolution = 2; // like 2x zoomed out
 
 export interface Options {
@@ -17,7 +17,7 @@ export interface Options {
   interactive?: boolean;
   onHover?: (value: number) => void;
   onLeave?: () => void;
-  downsample?: boolean;
+  downsample?: boolean | number;
 }
 
 const DefaultOptions: Partial<Options> = {
@@ -40,10 +40,6 @@ export default class Line {
 
     this.options = Object.assign({}, DefaultOptions, options);
 
-    this.data = this.options.downsample
-      ? LTD(data, this.calThreshold(data))
-      : this.options.data;
-
     const size = canvas.getBoundingClientRect();
     this.size = {
       width: size.width * resolution,
@@ -54,6 +50,25 @@ export default class Line {
     canvas.style.width = size.width + "px";
     canvas.style.height = size.height + "px";
 
+    this.data = this.options.downsample
+      ? LTTB(
+          data,
+          typeof this.options.downsample === "number"
+            ? this.options.downsample
+            : this.calThreshold(data)
+        )
+      : this.options.data;
+
+    this.xScale = d3Scale
+      .scaleLinear()
+      .domain([0, this.data.length - 1])
+      .range([0, this.size.width]);
+    const maxVal = max(data); // Still use max val from original data
+    this.yScale = d3Scale
+      .scaleLinear()
+      .domain([0, maxVal])
+      .range([0, this.size.height * 0.8]);
+
     this.initContext();
     this.buildLine();
     this.buildOverlay();
@@ -61,8 +76,15 @@ export default class Line {
     this.draw();
   }
 
-  private calThreshold(data: Options["data"]) {
-    return 100;
+  private calThreshold(data: Options["data"]): number {
+    const { length } = data;
+
+    if (length < 2) return length;
+
+    // The interval of two adjacent points is 5 display pixels
+    const maxPoints = Math.floor(this.size.width / 5 + 1);
+
+    return length > maxPoints ? maxPoints : length;
   }
 
   private initContext() {
@@ -79,15 +101,6 @@ export default class Line {
       100
     );
     this.camera.position.z = 20;
-    this.xScale = d3Scale
-      .scaleLinear()
-      .domain([0, this.data.length - 1])
-      .range([0, this.size.width]);
-    const maxVal = max(this.data);
-    this.yScale = d3Scale
-      .scaleLinear()
-      .domain([0, maxVal])
-      .range([0, this.size.height * 0.8]);
   }
 
   private buildLine() {
