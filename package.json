@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "description": "Dead simple line chart.",
   "main": "dist/index.js",
+  "keywords": ["webgl", "chart", "visualisation"],
   "scripts": {
     "build": "parcel build index.ts --out-dir dist"
   },
