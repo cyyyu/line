@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import * as d3Scale from "d3-scale";
-import { max, LTTB } from "./util";
+import { max, LTTB, Data, isYData } from "./util";
 
 // Constants
 const lineColor = 0xdf0054;
@@ -13,9 +13,9 @@ const resolution = 2; // like 2x zoomed out
 
 export interface Options {
   canvas: HTMLCanvasElement;
-  data: number[];
+  data: Data[];
   interactive?: boolean;
-  onHover?: (value: number) => void;
+  onHover?: (value: Data) => void;
   onLeave?: () => void;
   downsample?: boolean | number;
 }
@@ -34,9 +34,15 @@ export default class Line {
   private xScale: d3Scale.ScaleLinear<number, number>;
   private yScale: d3Scale.ScaleLinear<number, number>;
   private data: Options["data"];
+  private checkedIsYData: boolean;
 
   constructor(options: Options) {
     const { data, canvas } = options;
+    const { length } = data;
+
+    if (!length) return;
+
+    this.checkedIsYData = isYData(data[0]);
 
     this.options = Object.assign({}, DefaultOptions, options);
 
@@ -61,7 +67,11 @@ export default class Line {
 
     this.xScale = d3Scale
       .scaleLinear()
-      .domain([0, this.data.length - 1])
+      .domain(
+        this.checkedIsYData
+          ? [0, this.data.length - 1]
+          : [this.data[0][0], this.data[this.data.length - 1][0]]
+      )
       .range([0, this.size.width]);
     const maxVal = max(data); // Still use max val from original data
     this.yScale = d3Scale
@@ -111,8 +121,10 @@ export default class Line {
 
     const halfLineWidth = lineWidth / 2;
 
-    const firstPointX = this.xScale(0);
-    const firstPointY = this.yScale(this.data[0]);
+    const firstPointX = this.xScale(this.checkedIsYData ? 0 : this.data[0][0]);
+    const firstPointY = this.yScale(
+      this.checkedIsYData ? this.data[0] : this.data[0][1]
+    );
     let tempPrePoint12 = [
       [firstPointX, firstPointY - halfLineWidth],
       [firstPointX, firstPointY + halfLineWidth]
@@ -123,10 +135,16 @@ export default class Line {
     // 1 2 4
     // 0 3 5
     for (let i = 1, len = this.data.length; i < len; ++i) {
-      const preX = this.xScale(i - 1);
-      const preY = this.yScale(this.data[i - 1]);
-      const curX = this.xScale(i);
-      const curY = this.yScale(this.data[i]);
+      const preX = this.xScale(
+        this.checkedIsYData ? i - 1 : this.data[i - 1][0]
+      );
+      const preY = this.yScale(
+        this.checkedIsYData ? this.data[i - 1] : this.data[i - 1][1]
+      );
+      const curX = this.xScale(this.checkedIsYData ? i : this.data[i][0]);
+      const curY = this.yScale(
+        this.checkedIsYData ? this.data[i] : this.data[i][1]
+      );
 
       let x0: number,
         y0: number,
@@ -145,8 +163,12 @@ export default class Line {
 
       // Not last point
       if (i !== len - 1) {
-        const nexX = this.xScale(i + 1);
-        const nexY = this.yScale(this.data[i + 1]);
+        const nexX = this.xScale(
+          this.checkedIsYData ? i + 1 : this.data[i + 1][0]
+        );
+        const nexY = this.yScale(
+          this.checkedIsYData ? this.data[i + 1] : this.data[i + 1][1]
+        );
 
         // line segment from point 1 to 2
         k1 = (curY - preY) / (curX - preX);
@@ -231,10 +253,16 @@ export default class Line {
     const Z = -1;
 
     for (let i = 1, len = this.data.length; i < len; ++i) {
-      const preX = this.xScale(i - 1);
-      const preY = this.yScale(this.data[i - 1]);
-      const curX = this.xScale(i);
-      const curY = this.yScale(this.data[i]);
+      const preX = this.xScale(
+        this.checkedIsYData ? i - 1 : this.data[i - 1][0]
+      );
+      const preY = this.yScale(
+        this.checkedIsYData ? this.data[i - 1] : this.data[i - 1][1]
+      );
+      const curX = this.xScale(this.checkedIsYData ? i : this.data[i][0]);
+      const curY = this.yScale(
+        this.checkedIsYData ? this.data[i] : this.data[i][1]
+      );
       vertices.push(
         // 0
         preX,
@@ -282,12 +310,29 @@ export default class Line {
     canvas.addEventListener("mouseleave", this.onMouseLeave.bind(this));
   }
 
+  private getXIndexByOffset(offsetX: number) {
+    const roughX = this.xScale.invert(offsetX * resolution);
+    if (this.checkedIsYData) {
+      return Math.round(roughX);
+    } else {
+      for (let i = 0, len = this.data.length - 1; i < len; i++) {
+        const cur = this.data[i];
+        const nex = this.data[i + 1];
+        if (cur[0] <= roughX && nex[0] >= roughX) {
+          return roughX - cur[0] > nex[0] - roughX ? i + 1 : i;
+        }
+      }
+    }
+  }
+
   private drawVerticalLine(e: MouseEvent) {
     const { onHover } = this.options;
     const { offsetX } = e;
-    const xIndex = Math.round(this.xScale.invert(offsetX * resolution));
-    const x = this.xScale(xIndex);
-    const y = this.yScale(this.data[xIndex]);
+    let xIndex = this.getXIndexByOffset(offsetX);
+    const x = this.xScale(this.checkedIsYData ? xIndex : this.data[xIndex][0]);
+    const y = this.yScale(
+      this.checkedIsYData ? this.data[xIndex] : this.data[xIndex][1]
+    );
 
     const verticalLineMesh = new THREE.Object3D();
     verticalLineMesh.name = verticalLineMeshName;
