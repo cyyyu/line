@@ -32,6 +32,12 @@ line({
   canvas,
   data: [100, 200, 300, 200, 400, 100]
 });
+
+// Or you can use two demensional arrays when x value is meaningful to you
+line({
+  canvas,
+  data: [[2010, 100], [2012, 200], [2013, 400], [2014, 300]]
+});
 ```
 
 ## Highlights
@@ -61,7 +67,7 @@ By default the chart will follow your mouse movement and highlight current value
 ```
 line({
   canvas: document.querySelector("canvas"),
-  data: [100, 200, 300, 200, 400, 100],
+  data: [...],
   interactive: boolean, // Optional. Default is true
   onHover: (value: number) => {}, // Optional. Require 'interactive' to be true
   onLeave: () => {} // Optional. Require 'interactive' to be true
