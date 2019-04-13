@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/simple-line-chart.svg)](https://badge.fury.io/js/simple-line-chart)
 
-Dead simple line chart in webgl. **[Demo](https://cyyyu.github.io/projects/simple-line-chart/)**
+Dead simple line chart in webgl. **[Demo](https://codesandbox.io/s/0pq5v6j1qp?fontsize=14)**
 
 <img src="./imgs/screenshot.png" width="280" />
 
@@ -33,10 +33,6 @@ line({
   data: [100, 200, 300, 200, 400, 100]
 });
 ```
-
-## Demo
-
-To examine the basic demo on your local machine, please visit [here](https://github.com/cyyyu/line/tree/master/example).
 
 ## Highlights
 
