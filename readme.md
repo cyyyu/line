@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/simple-line-chart.svg)](https://badge.fury.io/js/simple-line-chart)
 
-Dead simple line chart in webgl. **[Demo](https://codesandbox.io/s/0pq5v6j1qp?fontsize=14)**
+Dead simple line chart in webgl. <a href="https://codesandbox.io/s/0pq5v6j1qp?fontsize=14" target="_blank">Demo</a>
 
 <img src="./imgs/screenshot.png" width="280" />
 
