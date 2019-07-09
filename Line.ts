@@ -178,6 +178,10 @@ export default class Line {
         // line segment from point 2 to 4
         k2 = (nexY - curY) / (nexX - curX);
         b2 = curY - curX * k2;
+
+        // when the slops of two line are same, skip it
+        if (k1 === k2) continue;
+
         deltaB2 = halfLineWidth / Math.cos(Math.atan(k2));
         tempDeltas[0] = deltaB1;
         tempDeltas[1] = deltaB2;
