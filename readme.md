@@ -71,33 +71,33 @@ For example:
 ```javascript
 line({
   // ...
-  downsample: true
+  canvas: document.querySelector('#canvas-original')
+  downsample: false
 });
-```
 
-<img style="margin:0 auto;" src="./imgs/downsample.png" width="400" />
-
-```javascript
 line({
   // ...
-  downsample: 40
+  canvas: document.querySelector('#canvas-downsampled')
+  downsample: 60 // default: true
 });
 ```
 
-<img style="margin:0 auto;" src="./imgs/downsample-40.png" width="400" />
+<img style="margin:0 auto;" src="./imgs/downsample.png" width="800" />
 
 ### Interactive
 
 By default the chart will follow your mouse movement and highlight current value. You can turn it off by `interactive: false`. Additionally, you are able to bind `onHover` and `onLeave` callbacks in case you need them.
 
-<img style="margin:0 auto;" src="./imgs/interactive.png" width="280" />
-
 ```javascript
 line({
   // ...
-  interactive: true
-});
+  /* uncomment this line to make it not respond to mouse hover event */
+  // interactive: false
+  onHover(d) { console.log(d) }
+})
 ```
+
+<img style="margin:0 auto;" src="./imgs/interactive.png" width="280" />
 
 ### License
 
