@@ -8,7 +8,7 @@ const activeLineColor = 0x000000;
 const dotColor = 0x480032;
 const overlayColor = 0xffece2;
 const verticalLineMeshName = "verticalLineMesh";
-const lineWidth = 4;
+const lineWidth = 6;
 const resolution = 2; // like 2x zoomed out
 
 export interface Options {
@@ -18,11 +18,15 @@ export interface Options {
   onHover?: (value: Data) => void;
   onLeave?: () => void;
   downsample?: boolean | number;
+  paddingX?: number;
+  paddingY?: number;
 }
 
 const DefaultOptions: Partial<Options> = {
   interactive: true,
-  downsample: true
+  downsample: true,
+  paddingX: 10,
+  paddingY: 10
 };
 
 export default class Line {
@@ -46,6 +50,8 @@ export default class Line {
 
     this.options = Object.assign({}, DefaultOptions, options);
 
+    const { paddingX, paddingY, downsample, data } = this.options;
+
     const size = canvas.getBoundingClientRect();
     this.size = {
       width: size.width * resolution,
@@ -56,14 +62,14 @@ export default class Line {
     canvas.style.width = size.width + "px";
     canvas.style.height = size.height + "px";
 
-    this.data = this.options.downsample
-      ? LTTB(
+    if (typeof downsample == "number" || this.downsample) {
+      this.data = LTTB(
           data,
-          typeof this.options.downsample === "number"
-            ? this.options.downsample
+          typeof downsample === "number"
+            ? downsample
             : this.calThreshold(data)
         )
-      : this.options.data;
+    } else this.data = data;
 
     this.xScale = d3Scale
       .scaleLinear()
@@ -72,12 +78,12 @@ export default class Line {
           ? [0, this.data.length - 1]
           : [this.data[0][0], this.data[this.data.length - 1][0]]
       )
-      .range([0, this.size.width]);
+      .range([paddingX, this.size.width - paddingX]);
     const maxVal = max(data); // Still use max val from original data
     this.yScale = d3Scale
       .scaleLinear()
       .domain([0, maxVal])
-      .range([0, this.size.height * 0.8]);
+      .range([paddingY, this.size.height * 0.8 - paddingY]);
 
     this.initContext();
     this.buildLine();
