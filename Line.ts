@@ -50,7 +50,7 @@ export default class Line {
 
     this.options = Object.assign({}, DefaultOptions, options);
 
-    const { paddingX, paddingY, downsample, data } = this.options;
+    const { paddingX, paddingY, downsample } = this.options;
 
     const size = canvas.getBoundingClientRect();
     this.size = {
@@ -62,13 +62,11 @@ export default class Line {
     canvas.style.width = size.width + "px";
     canvas.style.height = size.height + "px";
 
-    if (typeof downsample == "number" || this.downsample) {
+    if (typeof downsample == "number" || downsample) {
       this.data = LTTB(
-          data,
-          typeof downsample === "number"
-            ? downsample
-            : this.calThreshold(data)
-        )
+        data,
+        typeof downsample === "number" ? downsample : this.calThreshold(data)
+      );
     } else this.data = data;
 
     this.xScale = d3Scale
