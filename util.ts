@@ -26,7 +26,7 @@ export function LTTB(data: Data[], threshold: number): Data[] {
   const buckets: Data[][] = [];
   const { length } = data;
 
-  if (!length) return data;
+  if (!length || length <= threshold) return data;
 
   const first = data[0];
   const checkedIsYData = isYData(first);
