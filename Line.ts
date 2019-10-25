@@ -1,436 +1,366 @@
-import * as THREE from "three";
-import * as d3Scale from "d3-scale";
-import { max, LTTB, Data, isYData } from "./util";
-
-// Constants
-const lineColor = 0xdf0054;
-const activeLineColor = 0x000000;
-const dotColor = 0x480032;
-const overlayColor = 0xffece2;
-const verticalLineMeshName = "verticalLineMesh";
-const lineWidth = 6;
-const resolution = 2; // like 2x zoomed out
+import { max, min, LTTB, createLinearScale } from "./util";
+import { Data, RawData } from "./types";
+import { vec2, vec3, mat4 } from "gl-matrix";
 
 export interface Options {
   canvas: HTMLCanvasElement;
-  data: Data[];
-  interactive?: boolean;
-  onHover?: (value: Data) => void;
-  onLeave?: () => void;
+  data: RawData[];
+  color?: { r: number; g: number; b: number };
   downsample?: boolean | number;
-  paddingX?: number;
-  paddingY?: number;
 }
 
+// constants
+const PADDING = 20;
+const THICKNESS = 4;
+const LINE_COLOR: Options["color"] = {
+  r: 217,
+  g: 21,
+  b: 78
+};
+
 const DefaultOptions: Partial<Options> = {
-  interactive: true,
   downsample: true,
-  paddingX: 10,
-  paddingY: 10
+  color: LINE_COLOR
 };
 
 export default class Line {
   private options: Options;
-  private renderer: THREE.WebGLRenderer;
-  private scene: THREE.Scene;
-  private camera: THREE.OrthographicCamera;
-  private size: { width: number; height: number }; // Actual size of rendering
-  private xScale: d3Scale.ScaleLinear<number, number>;
-  private yScale: d3Scale.ScaleLinear<number, number>;
-  private data: Options["data"];
-  private checkedIsYData: boolean;
+  private data: Data[];
+  private gl: WebGL2RenderingContext;
+  private program: WebGLProgram;
+  private buffer: WebGLBuffer;
+  private numIndices: number;
+  private frustum: {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    near: number;
+    far: number;
+  };
+  private xScale: (n: number) => number;
+  private yScale: (n: number) => number;
 
   constructor(options: Options) {
-    const { data, canvas } = options;
-    const { length } = data;
-
-    if (!length) return;
-
-    this.checkedIsYData = isYData(data[0]);
-
+    // merge default options with user defined
     this.options = Object.assign({}, DefaultOptions, options);
 
-    const { paddingX, paddingY, downsample } = this.options;
+    const { data, canvas, downsample } = this.options;
 
-    const size = canvas.getBoundingClientRect();
-    this.size = {
-      width: size.width * resolution,
-      height: size.height * resolution
+    if (data.length < 2) {
+      // two more points made lines
+      return;
+    }
+
+    this.gl = canvas.getContext("webgl2");
+    if (!this.gl) throw new Error("Unable to create webgl2 context.");
+
+    const { width, height } = canvas;
+
+    this.gl.viewport(0, 0, width, height);
+
+    this.data = this.processData(data, downsample, width);
+
+    this.frustum = {
+      left: 0,
+      right: width,
+      bottom: 0,
+      top: height,
+      near: 1,
+      far: 100
     };
-    canvas.width = this.size.width;
-    canvas.height = this.size.height;
-    canvas.style.width = size.width + "px";
-    canvas.style.height = size.height + "px";
 
-    if (typeof downsample == "number" || downsample) {
-      this.data = LTTB(
-        data,
-        typeof downsample === "number" ? downsample : this.calThreshold(data)
-      );
-    } else this.data = data;
-
-    this.xScale = d3Scale
-      .scaleLinear()
-      .domain(
-        this.checkedIsYData
-          ? [0, this.data.length - 1]
-          : [this.data[0][0], this.data[this.data.length - 1][0]]
-      )
-      .range([paddingX, this.size.width - paddingX]);
-    const maxVal = max(data); // Still use max val from original data
-    this.yScale = d3Scale
-      .scaleLinear()
-      .domain([0, maxVal])
-      .range([paddingY, this.size.height * 0.8 - paddingY]);
-
-    this.initContext();
+    this.createScaleMappers();
+    this.createProgram();
     this.buildLine();
-    this.buildOverlay();
-    this.options.interactive && this.bindListener();
     this.draw();
   }
 
-  private calThreshold(data: Options["data"]): number {
+  private createScaleMappers() {
+    this.xScale = createLinearScale(
+      [this.data[0].x, this.data[this.data.length - 1].x],
+      [this.frustum.left, this.frustum.right]
+    );
+    this.yScale = createLinearScale(
+      [min(this.data), max(this.data)],
+      [this.frustum.bottom, this.frustum.top]
+    );
+  }
+
+  // RawData -> Data
+  // respect downsampling
+  private processData(
+    rawData: RawData[],
+    downsample: Options["downsample"],
+    width: number
+  ): Data[] {
+    const isOneDemensionData = typeof rawData[0] === "number";
+
+    const result: Data[] = [];
+
+    if (isOneDemensionData)
+      rawData.forEach((item, index) =>
+        result.push({ x: index, y: item as number })
+      );
+    else rawData.forEach(item => result.push({ x: item[0], y: item[1] }));
+
+    if (typeof downsample == "number" || downsample)
+      return LTTB(
+        result,
+        typeof downsample === "number"
+          ? downsample
+          : this.calThreshold(result, width)
+      );
+    else return result;
+  }
+
+  private createProgram() {
+    const { gl } = this;
+    const { color } = this.options;
+
+    const program = gl.createProgram();
+
+    const vShaderSrc = `
+      attribute vec2 position;
+      uniform mat4 mvp;
+      void main() {
+        gl_Position = mvp * vec4(position, 0.0, 1.0);
+      }
+    `;
+    const fShaderSrc = `
+      precision highp float;
+      vec3 lineColor = vec3(${color!.r / 255.0}, ${color!.g / 255.0}, ${color!
+      .b / 255.0});
+      void main() {
+        gl_FragColor = vec4(lineColor, 1.0);
+      }
+    `;
+
+    const vShader = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vShader, vShaderSrc);
+    gl.compileShader(vShader);
+    const fShader = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fShader, fShaderSrc);
+    gl.compileShader(fShader);
+
+    gl.attachShader(program, vShader);
+    gl.attachShader(program, fShader);
+
+    gl.deleteShader(vShader);
+    gl.deleteShader(fShader);
+
+    // todo: check failure
+    gl.linkProgram(program);
+    this.program = program;
+  }
+
+  private calThreshold(data: Data[], width: number): number {
     const { length } = data;
 
     if (length < 2) return length;
 
     // The interval of two adjacent points is 5 display pixels
-    const maxPoints = Math.floor(this.size.width / 5 + 1);
+    const maxPoints = Math.floor(width / 5 + 1);
 
     return length > maxPoints ? maxPoints : length;
   }
 
-  private initContext() {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xffffff);
-    this.renderer.setSize(this.size.width, this.size.height);
-    this.camera = new THREE.OrthographicCamera(
-      0,
-      this.size.width,
-      this.size.height,
-      0,
-      10,
-      100
-    );
-    this.camera.position.z = 20;
-  }
-
+  // build vertics and indices that form the line segments
   private buildLine() {
-    const geometry = new THREE.BufferGeometry();
-    const vertices = [];
+    const { gl } = this;
 
-    const Z = 0;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
 
-    const halfLineWidth = lineWidth / 2;
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    const ebo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
 
-    const firstPointX = this.xScale(this.checkedIsYData ? 0 : this.data[0][0]);
-    const firstPointY = this.yScale(
-      this.checkedIsYData ? this.data[0] : this.data[0][1]
-    );
-    let tempPrePoint12 = [
-      [firstPointX, firstPointY - halfLineWidth],
-      [firstPointX, firstPointY + halfLineWidth]
-    ];
-    let tempDeltas = [0, 0];
+    let vertices: number[] = [];
+    let indices: number[] = [];
 
-    // Drawing rectangles like:
-    // 1 2 4
-    // 0 3 5
-    for (let i = 1, len = this.data.length; i < len; ++i) {
-      const preX = this.xScale(
-        this.checkedIsYData ? i - 1 : this.data[i - 1][0]
+    // build first point
+    {
+      const p0 = vec2.fromValues(
+        this.xScale(this.data[0].x),
+        this.yScale(this.data[0].y)
       );
-      const preY = this.yScale(
-        this.checkedIsYData ? this.data[i - 1] : this.data[i - 1][1]
-      );
-      const curX = this.xScale(this.checkedIsYData ? i : this.data[i][0]);
-      const curY = this.yScale(
-        this.checkedIsYData ? this.data[i] : this.data[i][1]
+      const p1 = vec2.fromValues(
+        this.xScale(this.data[1].x),
+        this.yScale(this.data[1].y)
       );
 
-      let x0: number,
-        y0: number,
-        x1: number,
-        y1: number,
-        x2: number,
-        y2: number,
-        x3: number,
-        y3: number,
-        deltaB1: number,
-        deltaB2: number,
-        k1: number,
-        k2: number,
-        b1: number,
-        b2: number;
+      const p0p1 = vec2.sub(vec2.create(), p1, p0);
+      const normal = vec2.normalize(
+        vec2.create(),
+        vec2.fromValues(-p0p1[1], p0p1[0])
+      );
 
-      // Not last point
-      if (i !== len - 1) {
-        const nexX = this.xScale(
-          this.checkedIsYData ? i + 1 : this.data[i + 1][0]
-        );
-        const nexY = this.yScale(
-          this.checkedIsYData ? this.data[i + 1] : this.data[i + 1][1]
-        );
-
-        // line segment from point 1 to 2
-        k1 = (curY - preY) / (curX - preX);
-        b1 = preY - preX * k1;
-        deltaB1 = halfLineWidth / Math.cos(Math.atan(k1));
-
-        // line segment from point 2 to 4
-        k2 = (nexY - curY) / (nexX - curX);
-        b2 = curY - curX * k2;
-
-        // when the slops of two line are same, skip it
-        if (k1 === k2) continue;
-
-        deltaB2 = halfLineWidth / Math.cos(Math.atan(k2));
-        tempDeltas[0] = deltaB1;
-        tempDeltas[1] = deltaB2;
-      } else {
-        deltaB1 = tempDeltas[0];
-        deltaB2 = tempDeltas[1];
-      }
-
-      // point 0: (x0, y0)
-      x0 = i === 1 ? preX : tempPrePoint12[0][0];
-      y0 = i === 1 ? preY - deltaB1 : tempPrePoint12[0][1];
-
-      // point 1: (x1, y1)
-      x1 = i === 1 ? preX : tempPrePoint12[1][0];
-      y1 = i === 1 ? preY + deltaB1 : tempPrePoint12[1][1];
-
-      // point 2: (x2, y2)
-      x2 = i === len - 1 ? curX : (b2 - b1 + deltaB2 - deltaB1) / (k1 - k2);
-      y2 = i === len - 1 ? curY + deltaB2 : k1 * x2 + b1 + deltaB1;
-
-      // point 3: (x3, y3)
-      x3 = i === len - 1 ? curX : (b2 - b1 - deltaB2 + deltaB1) / (k1 - k2);
-      y3 = i === len - 1 ? curY - deltaB2 : k1 * x3 + b1 - deltaB1;
-
+      const t = vec2.fromValues(normal[0] * THICKNESS, normal[1] * THICKNESS);
+      const t0 = vec2.sub(vec2.create(), p0, t);
+      const t1 = vec2.add(vec2.create(), p0, t);
       vertices.push(
         // 0
-        x0,
-        y0,
-        Z,
+        t0[0],
+        t0[1],
         // 1
-        x1,
-        y1,
-        Z,
-        // 2
-        x2,
-        y2,
-        Z,
-        // 0
-        x0,
-        y0,
-        Z,
-        // 2
-        x2,
-        y2,
-        Z,
-        // 3
-        x3,
-        y3,
-        Z
+        t1[0],
+        t1[1]
       );
-
-      tempPrePoint12[0] = [x3, y3];
-      tempPrePoint12[1] = [x2, y2];
     }
 
-    geometry.addAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(vertices, 3)
-    );
-    const material = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(lineColor),
-      side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.z = Z;
-    this.scene.add(mesh);
-  }
-
-  private buildOverlay() {
-    const geometry = new THREE.BufferGeometry();
-    const vertices = [];
-
-    const Z = -1;
-
-    for (let i = 1, len = this.data.length; i < len; ++i) {
-      const preX = this.xScale(
-        this.checkedIsYData ? i - 1 : this.data[i - 1][0]
+    // build middle points
+    for (let i = 1; i < this.data.length - 1; i++) {
+      const p0 = vec2.fromValues(
+        this.xScale(this.data[i - 1].x),
+        this.yScale(this.data[i - 1].y)
       );
-      const preY = this.yScale(
-        this.checkedIsYData ? this.data[i - 1] : this.data[i - 1][1]
+      const p1 = vec2.fromValues(
+        this.xScale(this.data[i].x),
+        this.yScale(this.data[i].y)
       );
-      const curX = this.xScale(this.checkedIsYData ? i : this.data[i][0]);
-      const curY = this.yScale(
-        this.checkedIsYData ? this.data[i] : this.data[i][1]
+      const p2 = vec2.fromValues(
+        this.xScale(this.data[i + 1].x),
+        this.yScale(this.data[i + 1].y)
       );
+
+      const p0p1 = vec2.sub(vec2.create(), p1, p0);
+      const p1p2 = vec2.sub(vec2.create(), p2, p1);
+
+      const p0p1Norm = vec2.normalize(vec2.create(), p0p1);
+      const p1p2Norm = vec2.normalize(vec2.create(), p1p2);
+      const tangent = vec2.add(vec2.create(), p0p1Norm, p1p2Norm);
+      const tangentNorm = vec2.normalize(vec2.create(), tangent);
+      const miter = vec2.fromValues(-tangentNorm[1], tangentNorm[0]);
+
+      const normal0 = vec2.normalize(
+        vec2.create(),
+        vec2.fromValues(-p0p1[1], p0p1[0])
+      );
+
+      const len = THICKNESS / vec2.dot(miter, normal0);
+
+      const t2 = vec2.sub(
+        vec2.create(),
+        p1,
+        vec2.fromValues(miter[0] * len, miter[1] * len)
+      );
+
+      const t3 = vec2.add(
+        vec2.create(),
+        p1,
+        vec2.fromValues(miter[0] * len, miter[1] * len)
+      );
+
       vertices.push(
-        // 0
-        preX,
-        0,
-        Z,
-        // 1
-        preX,
-        preY,
-        Z,
         // 2
-        curX,
-        curY,
-        Z,
-        // 0
-        preX,
-        0,
-        Z,
-        // 2
-        curX,
-        curY,
-        Z,
+        t2[0],
+        t2[1],
         // 3
-        curX,
-        0,
-        Z
+        t3[0],
+        t3[1]
+      );
+      indices.push(
+        0 + (i - 1) * 2,
+        1 + (i - 1) * 2,
+        3 + (i - 1) * 2,
+        0 + (i - 1) * 2,
+        3 + (i - 1) * 2,
+        2 + (i - 1) * 2
       );
     }
 
-    geometry.addAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(vertices, 3)
-    );
-    const material = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(overlayColor),
-      side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.z = Z;
-    this.scene.add(mesh);
-  }
-
-  private bindListener() {
-    const { canvas } = this.options;
-    canvas.addEventListener("mousemove", this.drawVerticalLine.bind(this));
-    canvas.addEventListener("mouseleave", this.onMouseLeave.bind(this));
-  }
-
-  private getXIndexByOffset(offsetX: number) {
-    const roughX = this.xScale.invert(offsetX * resolution);
-    if (this.checkedIsYData) {
-      return Math.round(roughX);
-    } else {
-      for (let i = 0, len = this.data.length - 1; i < len; i++) {
-        const cur = this.data[i];
-        const nex = this.data[i + 1];
-        if (cur[0] <= roughX && nex[0] >= roughX) {
-          return roughX - cur[0] > nex[0] - roughX ? i + 1 : i;
-        }
-      }
-    }
-  }
-
-  private drawVerticalLine(e: MouseEvent) {
-    const { onHover } = this.options;
-    const { offsetX } = e;
-    let xIndex = this.getXIndexByOffset(offsetX);
-    const x = this.xScale(this.checkedIsYData ? xIndex : this.data[xIndex][0]);
-    const y = this.yScale(
-      this.checkedIsYData ? this.data[xIndex] : this.data[xIndex][1]
-    );
-
-    const verticalLineMesh = new THREE.Object3D();
-    verticalLineMesh.name = verticalLineMeshName;
-
-    // Line
-    const Z = 2;
+    // build last point
     {
-      const geometry = new THREE.BufferGeometry();
-      const halfLineWidth = lineWidth / 2;
-      const vertices = [
-        x - halfLineWidth,
-        0,
-        Z,
-        x - halfLineWidth,
-        this.size.height,
-        Z,
-        x + halfLineWidth,
-        this.size.height,
-        Z,
-        x - halfLineWidth,
-        0,
-        Z,
-        x + halfLineWidth,
-        this.size.height,
-        Z,
-        x + halfLineWidth,
-        0,
-        Z
-      ];
-      geometry.addAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(vertices, 3)
+      const i = this.data.length - 2;
+      const p1 = vec2.fromValues(
+        this.xScale(this.data[i].x),
+        this.yScale(this.data[i].y)
       );
-      geometry.computeBoundingSphere();
-      const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(activeLineColor),
-        side: THREE.DoubleSide
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      verticalLineMesh.add(mesh);
-    }
-    // Dot
-    {
-      const geometry = new THREE.BufferGeometry();
-      geometry.addAttribute(
-        "position",
-        new THREE.Float32BufferAttribute([x, y, Z], 3)
+      const p2 = vec2.fromValues(
+        this.xScale(this.data[i + 1].x),
+        this.yScale(this.data[i + 1].y)
       );
-      geometry.computeBoundingSphere();
-      const material = new THREE.PointsMaterial({
-        color: new THREE.Color(dotColor),
-        size: 18
-      });
-      const mesh = new THREE.Points(geometry, material);
-      verticalLineMesh.add(mesh);
+      const p1p2 = vec2.sub(vec2.create(), p2, p1);
+
+      const normal = vec2.normalize(
+        vec2.create(),
+        vec2.fromValues(-p1p2[1], p1p2[0])
+      );
+      const t = vec2.fromValues(normal[0] * THICKNESS, normal[1] * THICKNESS);
+      const t4 = vec2.sub(vec2.create(), p2, t);
+      const t5 = vec2.add(vec2.create(), p2, t);
+      vertices.push(
+        // 4
+        t4[0],
+        t4[1],
+        // 5
+        t5[0],
+        t5[1]
+      );
+      indices.push(
+        0 + i * 2,
+        1 + i * 2,
+        3 + i * 2,
+        0 + i * 2,
+        3 + i * 2,
+        2 + i * 2
+      );
     }
 
-    this.removeVerticalLine();
-    this.scene.add(verticalLineMesh);
-    this.draw();
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
-    // Emit callback
-    onHover && onHover(this.data[xIndex]);
+    const attribLoc = gl.getAttribLocation(this.program, "position");
+    gl.vertexAttribPointer(attribLoc, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(attribLoc);
+
+    gl.bufferData(
+      gl.ELEMENT_ARRAY_BUFFER,
+      new Uint16Array(indices),
+      gl.STATIC_DRAW
+    );
+
+    this.numIndices = indices.length;
+    this.buffer = vao;
   }
 
-  private onMouseLeave() {
-    const { onLeave } = this.options;
-    this.removeVerticalLine();
-    onLeave && onLeave();
-  }
+  private buildMVP() {
+    const { gl, frustum } = this;
 
-  private removeVerticalLine() {
-    const prevLine = this.scene.getObjectByName(verticalLineMeshName);
-    if (prevLine) this.scene.remove(prevLine);
-    this.draw();
+    const p = mat4.ortho(
+      mat4.create(),
+      frustum.left - PADDING,
+      frustum.right + PADDING,
+      frustum.bottom - PADDING,
+      frustum.top + PADDING,
+      frustum.near,
+      frustum.far
+    );
+    const v = mat4.targetTo(
+      mat4.create(),
+      vec3.fromValues(0, 0, 2),
+      vec3.fromValues(0, 0, -1),
+      vec3.fromValues(0, 1, 0)
+    );
+    const m = mat4.create();
+    const mvp = mat4.mul(mat4.create(), mat4.mul(mat4.create(), m, v), p);
+
+    gl.uniformMatrix4fv(gl.getUniformLocation(this.program, "mvp"), false, mvp);
   }
 
   private draw() {
-    const { canvas } = this.options;
-    this.renderer.render(this.scene, this.camera);
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.clearRect(0, 0, this.size.width, this.size.height);
-      ctx.drawImage(
-        this.renderer.domElement,
-        0,
-        0,
-        this.size.width,
-        this.size.height
-      );
-    }
+    const { gl } = this;
+    gl.useProgram(this.program);
+
+    gl.clearColor(0.9, 0.9, 0.9, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    this.buildMVP();
+
+    gl.bindVertexArray(this.buffer);
+    gl.drawElements(gl.TRIANGLES, this.numIndices, gl.UNSIGNED_SHORT, 0);
+
+    gl.bindVertexArray(null);
   }
 }

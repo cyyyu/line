@@ -1,23 +1,29 @@
-export type TupleData = [number, number]; // [x, y]
-export type YData = number; // Only y values
-export type Data = TupleData | YData;
+import { Data } from "./types";
 
-export const isYData = (data: Data) => typeof data === "number";
+export function createLinearScale(
+  domain: [number, number],
+  range: [number, number]
+): (n: number) => number {
+  const a = domain[1] - domain[0];
+  const b = range[1] - range[0];
+  return function(n: number) {
+    const c = n - domain[0];
+    return (c / a) * b + range[0];
+  };
+}
 
 // Find max value
 export function max(data: Data[]): number {
-  if (!data.length) return 0;
-  let re = data[0];
-  const checkedIsYData = isYData(re);
-  for (let i = 1, len = data.length; i < len; ++i) {
-    if (checkedIsYData) {
-      if (data[i] > re) re = data[i];
-    } else {
-      if (data[i][1] > re[1]) re = data[i];
-    }
-  }
-  if (checkedIsYData) return re as YData;
-  return re[1];
+  let max = Number.MIN_VALUE;
+  data.forEach(d => (max = Math.max(max, d.y)));
+  return max;
+}
+
+// Find min value
+export function min(data: Data[]): number {
+  let min = Number.MIN_VALUE;
+  data.forEach(d => (min = Math.min(min, d.y)));
+  return min;
 }
 
 // Largest triangles three buckets data dowmsampling algorithm
@@ -28,37 +34,17 @@ export function LTTB(data: Data[], threshold: number): Data[] {
 
   if (!length || length <= threshold) return data;
 
-  const first = data[0];
-  const checkedIsYData = isYData(first);
+  // First point
+  buckets.push([data[0]]);
+  // Middle
+  buckets.push(...divideIntoBuckets(data.slice(1, length - 1), threshold - 2));
+  // Last point
+  buckets.push([data[length - 1]]);
 
-  if (checkedIsYData) {
-    const yData = data as YData[];
-    // First point
-    buckets.push([yData[0]]);
-    // Middle
-    buckets.push(
-      ...divideIntoBuckets(yData.slice(1, length - 1), threshold - 2)
-    );
-    // Last point
-    buckets.push([yData[length - 1]]);
-
-    return buildPointsFromBuckets(buckets, checkedIsYData);
-  } else {
-    const tupleData = data as TupleData[];
-    // First point
-    buckets.push([tupleData[0]]);
-    // Middle
-    buckets.push(
-      ...divideIntoBuckets(tupleData.slice(1, length - 1), threshold - 2)
-    );
-    // Last point
-    buckets.push([tupleData[length - 1]]);
-
-    return buildPointsFromBuckets(buckets, checkedIsYData);
-  }
+  return buildPointsFromBuckets(buckets);
 }
 
-function buildPointsFromBuckets(buckets: Data[][], isYData: boolean): Data[] {
+function buildPointsFromBuckets(buckets: Data[][]): Data[] {
   const re: Data[] = [];
 
   const { length } = buckets;
@@ -70,14 +56,14 @@ function buildPointsFromBuckets(buckets: Data[][], isYData: boolean): Data[] {
     // prePoint, nextBucketAvg and curPoint
     const nextBucket: Data[] = buckets[i + 1];
     const prePoint: Data = re[i - 1];
-    const nextBucketAvg: number = avg(nextBucket, isYData);
+    const nextBucketAvg: number = avg(nextBucket);
     const curBucket: Data[] = buckets[i];
     let maxArea = 0,
       curPoint: Data;
     for (let j = 0, curBucketLen = curBucket.length; j < curBucketLen; ++j) {
       const area = calTriangleArea([
-        [0, isYData ? prePoint : prePoint[1]],
-        [1, isYData ? curBucket[j] : curBucket[j][1]],
+        [0, prePoint.y],
+        [1, curBucket[j].y],
         [2, nextBucketAvg]
       ]);
       if (area > maxArea) curPoint = curBucket[j];
@@ -99,12 +85,8 @@ function calTriangleArea(points: [number, number][]) {
   );
 }
 
-function avg(data: Data[], isYData: boolean) {
-  if (isYData)
-    return (data as YData[]).reduce((sum, item) => (sum += item)) / data.length;
-  return (
-    (data as TupleData).reduce((sum, item) => (sum += item[1]), 0) / data.length
-  );
+function avg(data: Data[]) {
+  return data.reduce((sum, item) => (sum += item.y), 0) / data.length;
 }
 
 function divideIntoBuckets(data: Data[], numOfBuckets: number) {
