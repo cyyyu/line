@@ -159,8 +159,8 @@ export default class Line {
 
     if (length < 2) return length;
 
-    // The interval of two adjacent points is 5 display pixels
-    const maxPoints = Math.floor(width / 5 + 1);
+    // The interval of two adjacent points is 15 display pixels
+    const maxPoints = Math.floor(width / 15 + 1);
 
     return length > maxPoints ? maxPoints : length;
   }
