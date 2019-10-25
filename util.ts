@@ -21,7 +21,7 @@ export function max(data: Data[]): number {
 
 // Find min value
 export function min(data: Data[]): number {
-  let min = Number.MIN_VALUE;
+  let min = Number.MAX_VALUE;
   data.forEach(d => (min = Math.min(min, d.y)));
   return min;
 }
