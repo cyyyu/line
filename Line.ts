@@ -353,7 +353,7 @@ export default class Line {
     const { gl } = this;
     gl.useProgram(this.program);
 
-    gl.clearColor(0.9, 0.9, 0.9, 1);
+    gl.clearColor(1, 1, 1, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     this.buildMVP();
