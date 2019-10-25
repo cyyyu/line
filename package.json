@@ -9,10 +9,7 @@
     "visualisation"
   ],
   "scripts": {
-    "build": "rimraf dist && parcel build index.ts --out-dir dist --experimental-scope-hoisting",
-    "deploy:patch": "npm run build && npm version patch && npm deploy",
-    "deploy:minor": "npm run build && npm version minor && npm deploy",
-    "deploy:major": "npm run build && npm version major && npm deploy"
+    "build": "rimraf dist && parcel build index.ts --out-dir dist --experimental-scope-hoisting"
   },
   "author": "Chuang Yu <cyu9960@gmail.com>",
   "license": "MIT",
