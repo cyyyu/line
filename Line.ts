@@ -1,26 +1,33 @@
 import { max, min, LTTB, createLinearScale } from "./util";
-import { Data, RawData } from "./types";
+import { Data, RawData, Color } from "./types";
 import { vec2, vec3, mat4 } from "gl-matrix";
 
 export interface Options {
   canvas: HTMLCanvasElement;
   data: RawData[];
-  color?: { r: number; g: number; b: number };
+  color?: Color;
+  backgroundColor?: Color;
   downsample?: boolean | number;
 }
 
 // constants
-const PADDING = 20;
-const THICKNESS = 4;
-const LINE_COLOR: Options["color"] = {
+const PADDING = 40;
+const THICKNESS = 3.8;
+const LINE_COLOR: Color = {
   r: 217,
   g: 21,
   b: 78
 };
+const BG_COLOR: Color = {
+  r: 248,
+  g: 248,
+  b: 248
+};
 
 const DefaultOptions: Partial<Options> = {
   downsample: true,
-  color: LINE_COLOR
+  color: LINE_COLOR,
+  backgroundColor: BG_COLOR
 };
 
 export default class Line {
@@ -57,15 +64,21 @@ export default class Line {
 
     const { width, height } = canvas;
 
-    this.gl.viewport(0, 0, width, height);
+    // improve resolution
+    canvas.width = width * 4;
+    canvas.height = height * 4;
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+
+    this.gl.viewport(0, 0, width * 4, height * 4);
 
     this.data = this.processData(data, downsample, width);
 
     this.frustum = {
       left: 0,
-      right: width,
+      right: width * 4,
       bottom: 0,
-      top: height,
+      top: height * 4,
       near: 1,
       far: 100
     };
@@ -81,10 +94,23 @@ export default class Line {
       [this.data[0].x, this.data[this.data.length - 1].x],
       [this.frustum.left, this.frustum.right]
     );
-    this.yScale = createLinearScale(
-      [min(this.data), max(this.data)],
-      [this.frustum.bottom, this.frustum.top]
-    );
+
+    // todo:
+    // when values contain negetives
+    // find a more proper min val to make the output look better
+    const minValue = min(this.data);
+    const maxValue = max(this.data);
+    if (minValue < 0) {
+      this.yScale = createLinearScale(
+        [minValue, maxValue],
+        [this.frustum.bottom, this.frustum.top]
+      );
+    } else {
+      this.yScale = createLinearScale(
+        [0, maxValue],
+        [this.frustum.bottom, this.frustum.top]
+      );
+    }
   }
 
   // RawData -> Data
@@ -351,9 +377,15 @@ export default class Line {
 
   private draw() {
     const { gl } = this;
+    const { backgroundColor } = this.options;
     gl.useProgram(this.program);
 
-    gl.clearColor(1, 1, 1, 1);
+    gl.clearColor(
+      backgroundColor.r / 255.0,
+      backgroundColor.g / 255.0,
+      backgroundColor.b / 255.0,
+      1
+    );
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     this.buildMVP();

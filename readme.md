@@ -6,7 +6,7 @@ Dead simple line chart in webgl. <a href="https://codesandbox.io/s/0pq5v6j1qp?fo
 
 `2.98KB` after gzip.
 
-<img style="margin:0 auto;" src="./imgs/screenshot.png" width="280" />
+<img style="margin:0 auto;" src="./imgs/screenshot.jpg" width="280" />
 
 ## Install
 
@@ -32,8 +32,9 @@ line({
 interface Options {
   canvas: HTMLCanvasElement; // the canvas to render to. Required.
   data: Data[]; // check out Data type definition below. Required.
-  downsample?: boolean | number; // default true
-  color?: {r: number, g: number, b: number}; // line color in rgb
+  downsample?: boolean | number; // default true.
+  color?: {r: number, g: number, b: number}; // line color in rgb.
+  backgroundColor?: {r: number, g: number, b: number}; // background color in rgb.
 }
 /**
  * Data type could be one or two dimensional array
@@ -76,7 +77,7 @@ line({
 });
 ```
 
-<img style="margin:0 auto;" src="./imgs/downsample.png" width="800" />
+<img style="margin:0 auto;" src="./imgs/downsample.jpg" width="760" />
 
 ### License
 
