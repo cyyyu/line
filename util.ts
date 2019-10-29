@@ -1,5 +1,32 @@
 import { Data } from "./types";
 
+export function getProperBounds(data: Data[]): [number, number] {
+  const minVal = min(data);
+  const maxVal = max(data);
+  const range = maxVal - minVal;
+  const tickRange = getProperTickRange(range / 16); // assume 16 ticks
+  const lowerBound = Math.floor(tickRange * Math.floor(minVal / tickRange - 1));
+  const upperBound = Math.ceil(tickRange * Math.ceil(1 + maxVal / tickRange));
+  return [lowerBound, upperBound];
+}
+
+function getProperTickRange(n: number): number {
+  const p = Math.pow(10, Math.ceil(Math.log10(n)));
+  const x = n / p;
+  if (x < 0.1) return 0.1 * p;
+  if (x <= 0.2) return 0.2 * p;
+  if (x <= 0.25) return 0.25 * p;
+  if (x <= 0.3) return 0.3 * p;
+  if (x <= 0.4) return 0.4 * p;
+  if (x <= 0.5) return 0.5 * p;
+  if (x <= 0.6) return 0.6 * p;
+  if (x <= 0.7) return 0.7 * p;
+  if (x <= 0.75) return 0.75 * p;
+  if (x <= 0.8) return 0.8 * p;
+  if (x <= 0.9) return 0.9 * p;
+  return 1.0 * p;
+}
+
 export function createLinearScale(
   domain: [number, number],
   range: [number, number]
@@ -13,14 +40,14 @@ export function createLinearScale(
 }
 
 // Find max value
-export function max(data: Data[]): number {
+function max(data: Data[]): number {
   let max = Number.MIN_VALUE;
   data.forEach(d => (max = Math.max(max, d.y)));
   return max;
 }
 
 // Find min value
-export function min(data: Data[]): number {
+function min(data: Data[]): number {
   let min = Number.MAX_VALUE;
   data.forEach(d => (min = Math.min(min, d.y)));
   return min;

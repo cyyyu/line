@@ -1,6 +1,7 @@
-import { max, min, LTTB, createLinearScale } from "./util";
+import { getProperBounds, LTTB, createLinearScale } from "./util";
 import { Data, RawData, Color } from "./types";
 import { vec2, vec3, mat4 } from "gl-matrix";
+import Shader from "./Shader";
 
 export interface Options {
   canvas: HTMLCanvasElement;
@@ -11,8 +12,7 @@ export interface Options {
 }
 
 // constants
-const PADDING = 40;
-const THICKNESS = 3.8;
+const THICKNESS = 3.2;
 const LINE_COLOR: Color = {
   r: 217,
   g: 21,
@@ -34,7 +34,13 @@ export default class Line {
   private options: Options;
   private data: Data[];
   private gl: WebGL2RenderingContext;
-  private program: WebGLProgram;
+
+  private lineShader: Shader;
+  private overlayShader: Shader;
+
+  private lineVAO: WebGLVertexArrayObject;
+  private overlayVAO: WebGLVertexArrayObject;
+
   private buffer: WebGLBuffer;
   private numIndices: number;
   private frustum: {
@@ -65,27 +71,29 @@ export default class Line {
     const { width, height } = canvas;
 
     // improve resolution
-    canvas.width = width * 4;
-    canvas.height = height * 4;
+    const fact = 2;
+    canvas.width = width * fact;
+    canvas.height = height * fact;
     canvas.style.width = width + "px";
     canvas.style.height = height + "px";
 
-    this.gl.viewport(0, 0, width * 4, height * 4);
+    this.gl.viewport(0, 0, width * fact, height * fact);
+    this.gl.enable(this.gl.DEPTH_TEST);
 
     this.data = this.processData(data, downsample, width);
 
     this.frustum = {
       left: 0,
-      right: width * 4,
+      right: width * fact,
       bottom: 0,
-      top: height * 4,
+      top: height * fact,
       near: 1,
       far: 100
     };
 
     this.createScaleMappers();
-    this.createProgram();
-    this.buildLine();
+    this.createShaders();
+    this.buildObjects();
     this.draw();
   }
 
@@ -95,22 +103,11 @@ export default class Line {
       [this.frustum.left, this.frustum.right]
     );
 
-    // todo:
-    // when values contain negetives
-    // find a more proper min val to make the output look better
-    const minValue = min(this.data);
-    const maxValue = max(this.data);
-    if (minValue < 0) {
-      this.yScale = createLinearScale(
-        [minValue, maxValue],
-        [this.frustum.bottom, this.frustum.top]
-      );
-    } else {
-      this.yScale = createLinearScale(
-        [0, maxValue],
-        [this.frustum.bottom, this.frustum.top]
-      );
-    }
+    const bounds = getProperBounds(this.data);
+    this.yScale = createLinearScale(bounds, [
+      this.frustum.bottom,
+      this.frustum.top
+    ]);
   }
 
   // RawData -> Data
@@ -140,20 +137,18 @@ export default class Line {
     else return result;
   }
 
-  private createProgram() {
+  private createShaders() {
     const { gl } = this;
-    const { color } = this.options;
+    const { color, backgroundColor } = this.options;
 
-    const program = gl.createProgram();
-
-    const vShaderSrc = `
+    const lineVShaderSrc = `
       attribute vec2 position;
       uniform mat4 mvp;
       void main() {
         gl_Position = mvp * vec4(position, 0.0, 1.0);
       }
     `;
-    const fShaderSrc = `
+    const lineFShaderSrc = `
       precision highp float;
       vec3 lineColor = vec3(${color!.r / 255.0}, ${color!.g / 255.0}, ${color!
       .b / 255.0});
@@ -162,22 +157,28 @@ export default class Line {
       }
     `;
 
-    const vShader = gl.createShader(gl.VERTEX_SHADER);
-    gl.shaderSource(vShader, vShaderSrc);
-    gl.compileShader(vShader);
-    const fShader = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(fShader, fShaderSrc);
-    gl.compileShader(fShader);
+    this.lineShader = new Shader(gl, lineVShaderSrc, lineFShaderSrc);
 
-    gl.attachShader(program, vShader);
-    gl.attachShader(program, fShader);
+    const overlayVShaderSrc = `
+      attribute vec2 position;
+      uniform mat4 mvp;
+      void main() {
+        gl_Position = mvp * vec4(position, -0.1, 1.0);
+      }
+    `;
+    const overlayFShaderSrc = `
+      precision mediump float;
+      uniform vec2 resolution;
+      vec3 bg = vec3(${backgroundColor!.r / 255.0}, ${backgroundColor!.g /
+      255.0}, ${backgroundColor!.b / 255.0});
+      void main() {
+        vec2 st = gl_FragCoord.xy / resolution;
+        float c = smoothstep(1.0, 0.0, st.y);
+        gl_FragColor = vec4(c * bg, 1.0);
+      }
+    `;
 
-    gl.deleteShader(vShader);
-    gl.deleteShader(fShader);
-
-    // todo: check failure
-    gl.linkProgram(program);
-    this.program = program;
+    this.overlayShader = new Shader(gl, overlayVShaderSrc, overlayFShaderSrc);
   }
 
   private calThreshold(data: Data[], width: number): number {
@@ -192,19 +193,13 @@ export default class Line {
   }
 
   // build vertics and indices that form the line segments
-  private buildLine() {
+  private buildObjects() {
     const { gl } = this;
 
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    const ebo = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-
-    let vertices: number[] = [];
-    let indices: number[] = [];
+    const lineVertices: number[] = [];
+    const lineIndices: number[] = [];
+    const overlayVertices: number[] = [];
+    const overlayIndices: number[] = [];
 
     // build first point
     {
@@ -226,7 +221,7 @@ export default class Line {
       const t = vec2.fromValues(normal[0] * THICKNESS, normal[1] * THICKNESS);
       const t0 = vec2.sub(vec2.create(), p0, t);
       const t1 = vec2.add(vec2.create(), p0, t);
-      vertices.push(
+      lineVertices.push(
         // 0
         t0[0],
         t0[1],
@@ -234,6 +229,26 @@ export default class Line {
         t1[0],
         t1[1]
       );
+
+      if (t0[0] < t1[0]) {
+        overlayVertices.push(
+          // 0
+          t0[0],
+          this.frustum.bottom,
+          // 1
+          t0[0],
+          t0[1]
+        );
+      } else {
+        overlayVertices.push(
+          // 0
+          t1[0],
+          this.frustum.bottom,
+          // 1
+          t1[0],
+          t1[1]
+        );
+      }
     }
 
     // build middle points
@@ -279,7 +294,7 @@ export default class Line {
         vec2.fromValues(miter[0] * len, miter[1] * len)
       );
 
-      vertices.push(
+      lineVertices.push(
         // 2
         t2[0],
         t2[1],
@@ -287,13 +302,29 @@ export default class Line {
         t3[0],
         t3[1]
       );
-      indices.push(
-        0 + (i - 1) * 2,
+      overlayVertices.push(
+        // 0
+        t3[0],
+        this.frustum.bottom,
+        // 1
+        t3[0],
+        t3[1]
+      );
+      lineIndices.push(
         1 + (i - 1) * 2,
-        3 + (i - 1) * 2,
         0 + (i - 1) * 2,
-        3 + (i - 1) * 2,
-        2 + (i - 1) * 2
+        2 + (i - 1) * 2,
+        1 + (i - 1) * 2,
+        2 + (i - 1) * 2,
+        3 + (i - 1) * 2
+      );
+      overlayIndices.push(
+        1 + (i - 1) * 2,
+        0 + (i - 1) * 2,
+        2 + (i - 1) * 2,
+        1 + (i - 1) * 2,
+        2 + (i - 1) * 2,
+        3 + (i - 1) * 2
       );
     }
 
@@ -317,7 +348,7 @@ export default class Line {
       const t = vec2.fromValues(normal[0] * THICKNESS, normal[1] * THICKNESS);
       const t4 = vec2.sub(vec2.create(), p2, t);
       const t5 = vec2.add(vec2.create(), p2, t);
-      vertices.push(
+      lineVertices.push(
         // 4
         t4[0],
         t4[1],
@@ -325,30 +356,105 @@ export default class Line {
         t5[0],
         t5[1]
       );
-      indices.push(
-        0 + i * 2,
+      if (t4[0] < t5[0]) {
+        overlayVertices.push(
+          // 0
+          t5[0],
+          this.frustum.bottom,
+          // 1
+          t5[0],
+          t5[1]
+        );
+      } else {
+        overlayVertices.push(
+          // 0
+          t4[0],
+          this.frustum.bottom,
+          // 1
+          t4[0],
+          t4[1]
+        );
+      }
+
+      lineIndices.push(
         1 + i * 2,
-        3 + i * 2,
         0 + i * 2,
-        3 + i * 2,
-        2 + i * 2
+        2 + i * 2,
+        1 + i * 2,
+        2 + i * 2,
+        3 + i * 2
+      );
+      overlayIndices.push(
+        1 + i * 2,
+        0 + i * 2,
+        2 + i * 2,
+        1 + i * 2,
+        2 + i * 2,
+        3 + i * 2
       );
     }
 
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    {
+      const lineVAO = gl.createVertexArray();
+      gl.bindVertexArray(lineVAO);
 
-    const attribLoc = gl.getAttribLocation(this.program, "position");
-    gl.vertexAttribPointer(attribLoc, 2, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(attribLoc);
+      const lineVBO = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, lineVBO);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array(lineVertices),
+        gl.STATIC_DRAW
+      );
 
-    gl.bufferData(
-      gl.ELEMENT_ARRAY_BUFFER,
-      new Uint16Array(indices),
-      gl.STATIC_DRAW
-    );
+      const lineEBO = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lineEBO);
+      gl.bufferData(
+        gl.ELEMENT_ARRAY_BUFFER,
+        new Uint16Array(lineIndices),
+        gl.STATIC_DRAW
+      );
 
-    this.numIndices = indices.length;
-    this.buffer = vao;
+      const positionLoc = gl.getAttribLocation(
+        this.lineShader.program,
+        "position"
+      );
+      gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(positionLoc);
+
+      this.lineVAO = lineVAO;
+      this.lineShader.setNumOfIndices(lineIndices.length);
+    }
+
+    {
+      const overlayVAO = gl.createVertexArray();
+      gl.bindVertexArray(overlayVAO);
+
+      const overlayVBO = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, overlayVBO);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array(overlayVertices),
+        gl.STATIC_DRAW
+      );
+
+      const overlayEBO = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, overlayEBO);
+      gl.bufferData(
+        gl.ELEMENT_ARRAY_BUFFER,
+        new Uint16Array(overlayIndices),
+        gl.STATIC_DRAW
+      );
+
+      const positionLoc = gl.getAttribLocation(
+        this.overlayShader.program,
+        "position"
+      );
+      gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(positionLoc);
+
+      this.overlayVAO = overlayVAO;
+      this.overlayShader.setNumOfIndices(overlayIndices.length);
+    }
   }
 
   private buildMVP() {
@@ -356,10 +462,10 @@ export default class Line {
 
     const p = mat4.ortho(
       mat4.create(),
-      frustum.left - PADDING,
-      frustum.right + PADDING,
-      frustum.bottom - PADDING,
-      frustum.top + PADDING,
+      frustum.left,
+      frustum.right,
+      frustum.bottom,
+      frustum.top,
       frustum.near,
       frustum.far
     );
@@ -372,13 +478,12 @@ export default class Line {
     const m = mat4.create();
     const mvp = mat4.mul(mat4.create(), mat4.mul(mat4.create(), m, v), p);
 
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.program, "mvp"), false, mvp);
+    return mvp;
   }
 
   private draw() {
     const { gl } = this;
     const { backgroundColor } = this.options;
-    gl.useProgram(this.program);
 
     gl.clearColor(
       backgroundColor.r / 255.0,
@@ -388,11 +493,21 @@ export default class Line {
     );
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    this.buildMVP();
+    const mvp = this.buildMVP();
 
-    gl.bindVertexArray(this.buffer);
-    gl.drawElements(gl.TRIANGLES, this.numIndices, gl.UNSIGNED_SHORT, 0);
+    this.lineShader.use();
+    this.lineShader.setMat4("mvp", mvp);
+    this.lineShader.draw(this.lineVAO);
 
-    gl.bindVertexArray(null);
+    this.overlayShader.use();
+    this.overlayShader.setMat4("mvp", mvp);
+    this.overlayShader.set2fv(
+      "resolution",
+      new Float32Array([
+        this.frustum.right - this.frustum.left,
+        this.frustum.top - this.frustum.bottom
+      ])
+    );
+    this.overlayShader.draw(this.overlayVAO);
   }
 }
