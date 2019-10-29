@@ -173,7 +173,7 @@ export default class Line {
       255.0}, ${backgroundColor!.b / 255.0});
       void main() {
         vec2 st = gl_FragCoord.xy / resolution;
-        float c = smoothstep(1.0, 0.0, st.y);
+        float c = smoothstep(1.6, 0.0, st.y);
         gl_FragColor = vec4(c * bg, 1.0);
       }
     `;
