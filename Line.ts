@@ -66,7 +66,7 @@ export default class Line {
     }
 
     this.gl = canvas.getContext("webgl2");
-    if (!this.gl) throw new Error("Unable to create webgl2 context.");
+    if (!this.gl) throw new Error("You browser doesn't support WebGL2.");
 
     const { width, height } = canvas;
 
