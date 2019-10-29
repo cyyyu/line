@@ -63,10 +63,8 @@ export function LTTB(data: Data[], threshold: number): Data[] {
 
   // First point
   buckets.push([data[0]]);
-  // Middle
-  buckets.push(...divideIntoBuckets(data.slice(1, length - 1), threshold - 2));
-  // Last point
-  buckets.push([data[length - 1]]);
+  // Rest
+  buckets.push(...divideIntoBuckets(data.slice(1, length), threshold - 2));
 
   return buildPointsFromBuckets(buckets);
 }
@@ -78,27 +76,34 @@ function buildPointsFromBuckets(buckets: Data[][]): Data[] {
 
   // First
   re.push(buckets[0][0]);
-  for (let i = 1; i < length - 1; ++i) {
+  // Middles
+  for (let i = 1; i < length; ++i) {
     // Find the biggest triangle which is made up with
     // prePoint, nextBucketAvg and curPoint
-    const nextBucket: Data[] = buckets[i + 1];
     const prePoint: Data = re[i - 1];
-    const nextBucketAvg: number = avg(nextBucket);
+
+    let nextBucketAvg: [number, number];
+    if (i === length - 1) {
+      nextBucketAvg = [0, 0];
+    } else {
+      const nextBucket: Data[] = buckets[i + 1];
+      nextBucketAvg = avg(nextBucket);
+    }
+
     const curBucket: Data[] = buckets[i];
+
     let maxArea = 0,
       curPoint: Data;
     for (let j = 0, curBucketLen = curBucket.length; j < curBucketLen; ++j) {
       const area = calTriangleArea([
-        [0, prePoint.y],
-        [1, curBucket[j].y],
-        [2, nextBucketAvg]
+        [prePoint.x, prePoint.y],
+        [curBucket[j].x, curBucket[j].y],
+        nextBucketAvg
       ]);
       if (area > maxArea) curPoint = curBucket[j];
     }
     re.push(curPoint);
   }
-  // Last
-  re.push(buckets[length - 1][0]);
 
   return re;
 }
@@ -113,11 +118,19 @@ function calTriangleArea(points: [number, number][]) {
 }
 
 function avg(data: Data[]) {
-  return data.reduce((sum, item) => (sum += item.y), 0) / data.length;
+  const re = data.reduce(
+    (sum, item) => {
+      sum[0] += item.x;
+      sum[1] += item.y;
+      return sum;
+    },
+    [0, 0]
+  );
+  return [re[0] / data.length, re[1] / data.length] as [number, number];
 }
 
 function divideIntoBuckets(data: Data[], numOfBuckets: number) {
-  if (numOfBuckets === 0) {
+  if (numOfBuckets <= 0) {
     return [data];
   }
 
