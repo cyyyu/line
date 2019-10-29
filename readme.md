@@ -6,7 +6,7 @@ Dead simple line chart in webgl. <a href="https://codesandbox.io/s/0pq5v6j1qp?fo
 
 `2.98KB` after gzip.
 
-<img style="margin:0 auto;" src="./imgs/screenshot.jpg" width="280" />
+<img style="margin:0 auto;" src="./imgs/screenshot.png" width="280" />
 
 ## Install
 
@@ -77,7 +77,7 @@ line({
 });
 ```
 
-<img style="margin:0 auto;" src="./imgs/downsample.jpg" width="760" />
+<img style="margin:0 auto;" src="./imgs/downsample.png" width="600" />
 
 ### License
 
