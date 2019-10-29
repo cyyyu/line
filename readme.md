@@ -4,7 +4,7 @@
 
 Dead simple line chart in webgl. <a href="https://codesandbox.io/s/0pq5v6j1qp?fontsize=14" target="_blank">Demo</a>
 
-`2.98KB` after gzip.
+`4.8KB` after gzip.
 
 <img style="margin:0 auto;" src="./imgs/screenshot.png" width="280" />
 
