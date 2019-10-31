@@ -10,7 +10,7 @@ Dead simple line chart in webgl. <a href="https://codesandbox.io/s/0pq5v6j1qp?fo
 
 ## Install
 
-`$ npm install --save simple-line-chart`
+`$ npm install simple-line-chart`
 
 ## Simple Example
 
