@@ -1,4 +1,4 @@
-import { getProperBounds, LTTB, createLinearScale } from "./util";
+import { getProperBounds, LTTB, createLinearScale, makeSmooth } from "./util";
 import { Data, RawData, Color } from "./types";
 import { vec2, vec3, mat4 } from "gl-matrix";
 import Shader from "./Shader";
@@ -19,9 +19,9 @@ const LINE_COLOR: Color = {
   b: 78
 };
 const BG_COLOR: Color = {
-  r: 248,
-  g: 248,
-  b: 248
+  r: 250,
+  g: 250,
+  b: 250
 };
 
 const DefaultOptions: Partial<Options> = {
@@ -119,7 +119,7 @@ export default class Line {
   ): Data[] {
     const isOneDemensionData = typeof rawData[0] === "number";
 
-    const result: Data[] = [];
+    let result: Data[] = [];
 
     if (isOneDemensionData)
       rawData.forEach((item, index) =>
@@ -128,13 +128,17 @@ export default class Line {
     else rawData.forEach(item => result.push({ x: item[0], y: item[1] }));
 
     if (typeof downsample == "number" || downsample)
-      return LTTB(
+      result = LTTB(
         result,
         typeof downsample === "number"
           ? downsample
           : this.calThreshold(result, width)
       );
-    else return result;
+
+    // make corners smooth
+    result = makeSmooth(result);
+
+    return result;
   }
 
   private createShaders() {
@@ -150,8 +154,8 @@ export default class Line {
     `;
     const lineFShaderSrc = `
       precision highp float;
-      vec3 lineColor = vec3(${color!.r / 255.0}, ${color!.g / 255.0}, ${color!
-      .b / 255.0});
+      vec3 lineColor = vec3(${color!.r / 250.0}, ${color!.g / 250.0}, ${color!
+      .b / 250.0});
       void main() {
         gl_FragColor = vec4(lineColor, 1.0);
       }
@@ -169,11 +173,11 @@ export default class Line {
     const overlayFShaderSrc = `
       precision mediump float;
       uniform vec2 resolution;
-      vec3 bg = vec3(${backgroundColor!.r / 255.0}, ${backgroundColor!.g /
-      255.0}, ${backgroundColor!.b / 255.0});
+      vec3 bg = vec3(${backgroundColor!.r / 250.0}, ${backgroundColor!.g /
+      250.0}, ${backgroundColor!.b / 250.0});
       void main() {
         vec2 st = gl_FragCoord.xy / resolution;
-        float c = smoothstep(1.6, 0.0, st.y);
+        float c = smoothstep(1.2, 0.0, st.y);
         gl_FragColor = vec4(c * bg, 1.0);
       }
     `;
@@ -486,9 +490,9 @@ export default class Line {
     const { backgroundColor } = this.options;
 
     gl.clearColor(
-      backgroundColor.r / 255.0,
-      backgroundColor.g / 255.0,
-      backgroundColor.b / 255.0,
+      backgroundColor.r / 250.0,
+      backgroundColor.g / 250.0,
+      backgroundColor.b / 250.0,
       1
     );
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

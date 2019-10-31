@@ -53,6 +53,62 @@ function min(data: Data[]): number {
   return min;
 }
 
+// make corners smooth
+export function makeSmooth(data: Data[]): Data[] {
+  let res: Data[] = [];
+  res.push(data[0]);
+  for (let i = 1; i < data.length - 1; i++) {
+    const prePoint = data[i - 1];
+    const curPoint = data[i];
+    const nextPoint = data[i + 1];
+
+    const p1: Data = {
+      x: (9 * curPoint.x + prePoint.x) / 10,
+      y: (9 * curPoint.y + prePoint.y) / 10
+    };
+    const p2: Data = {
+      x: (9 * curPoint.x + nextPoint.x) / 10,
+      y: (9 * curPoint.y + nextPoint.y) / 10
+    };
+    res.push(...getPoints(5, p1, curPoint, p2));
+  }
+  res.push(data[data.length - 1]);
+  return res;
+}
+
+function getPoints(divisions: number = 5, p0: Data, p1: Data, p2: Data) {
+  const points: Data[] = [];
+  for (let i = 0; i < divisions; i++) {
+    const t = i / divisions;
+    points.push({
+      x: QuadraticBezier(t, p0.x, p1.x, p2.x),
+      y: QuadraticBezier(t, p0.y, p1.y, p2.y)
+    });
+  }
+  return points;
+}
+
+function QuadraticBezier(t: number, p0: number, p1: number, p2: number) {
+  return (
+    QuadraticBezierP0(t, p0) +
+    QuadraticBezierP1(t, p1) +
+    QuadraticBezierP2(t, p2)
+  );
+}
+
+function QuadraticBezierP0(t: number, p: number) {
+  const k = 1 - t;
+  return k * k * p;
+}
+
+function QuadraticBezierP1(t: number, p: number) {
+  return 2 * (1 - t) * t * p;
+}
+
+function QuadraticBezierP2(t: number, p: number) {
+  return t * t * p;
+}
+
 // Largest triangles three buckets data dowmsampling algorithm
 // Based on Sveinn Steinarsson's 2013 paper: https://skemman.is/bitstream/1946/15343/3/SS_MSthesis.pdf
 export function LTTB(data: Data[], threshold: number): Data[] {
