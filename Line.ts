@@ -424,6 +424,7 @@ export default class Line {
       );
       gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
       gl.enableVertexAttribArray(positionLoc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
       this.lineVAO = lineVAO;
       this.lineShader.setNumOfIndices(lineIndices.length);
@@ -455,6 +456,7 @@ export default class Line {
       );
       gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
       gl.enableVertexAttribArray(positionLoc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
       this.overlayVAO = overlayVAO;
       this.overlayShader.setNumOfIndices(overlayIndices.length);
