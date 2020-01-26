@@ -9,6 +9,7 @@ export interface Options {
   color?: Color;
   backgroundColor?: Color;
   downsample?: boolean | number;
+  onHover?: (d: Data) => void;
 }
 
 // constants
@@ -23,6 +24,7 @@ const BG_COLOR: Color = {
   g: 250,
   b: 250
 };
+const FACT = 2;
 
 const DefaultOptions: Partial<Options> = {
   downsample: true,
@@ -33,13 +35,18 @@ const DefaultOptions: Partial<Options> = {
 export default class Line {
   private options: Options;
   private data: Data[];
+  private smoothData: Data[];
   private gl: WebGL2RenderingContext;
 
   private lineShader: Shader;
   private overlayShader: Shader;
+  private indicatorShader: Shader;
 
   private lineVAO: WebGLVertexArrayObject;
   private overlayVAO: WebGLVertexArrayObject;
+  private indicatorVAO: WebGLVertexArrayObject;
+
+  private offsetX: number = -999;
 
   private buffer: WebGLBuffer;
   private numIndices: number;
@@ -58,7 +65,7 @@ export default class Line {
     // merge default options with user defined
     this.options = Object.assign({}, DefaultOptions, options);
 
-    const { data, canvas, downsample } = this.options;
+    const { data, canvas, downsample, onHover } = this.options;
 
     if (data.length < 2) {
       // two more points made lines
@@ -71,22 +78,22 @@ export default class Line {
     const { width, height } = canvas;
 
     // improve resolution
-    const fact = 2;
-    canvas.width = width * fact;
-    canvas.height = height * fact;
+    canvas.width = width * FACT;
+    canvas.height = height * FACT;
     canvas.style.width = width + "px";
     canvas.style.height = height + "px";
 
-    this.gl.viewport(0, 0, width * fact, height * fact);
+    this.gl.viewport(0, 0, width * FACT, height * FACT);
     this.gl.enable(this.gl.DEPTH_TEST);
 
     this.data = this.processData(data, downsample, width);
-
+    // make corners smooth
+    this.smoothData = makeSmooth(this.data);
     this.frustum = {
       left: 0,
-      right: width * fact,
+      right: width * FACT,
       bottom: 0,
-      top: height * fact,
+      top: height * FACT,
       near: 1,
       far: 100
     };
@@ -94,16 +101,17 @@ export default class Line {
     this.createScaleMappers();
     this.createShaders();
     this.buildObjects();
+    if (onHover) this.bindListeners();
     this.draw();
   }
 
   private createScaleMappers() {
     this.xScale = createLinearScale(
-      [this.data[0].x, this.data[this.data.length - 1].x],
+      [this.smoothData[0].x, this.smoothData[this.smoothData.length - 1].x],
       [this.frustum.left, this.frustum.right]
     );
 
-    const bounds = getProperBounds(this.data);
+    const bounds = getProperBounds(this.smoothData);
     this.yScale = createLinearScale(bounds, [
       this.frustum.bottom,
       this.frustum.top
@@ -134,9 +142,6 @@ export default class Line {
           ? downsample
           : this.calThreshold(result, width)
       );
-
-    // make corners smooth
-    result = makeSmooth(result);
 
     return result;
   }
@@ -183,6 +188,28 @@ export default class Line {
     `;
 
     this.overlayShader = new Shader(gl, overlayVShaderSrc, overlayFShaderSrc);
+
+    if (this.options.onHover) {
+      const indicatorVShaderSrc = `
+        uniform float offsetX;
+        uniform mat4 mvp;
+        attribute vec2 position;
+        void main() {
+          gl_Position = mvp * vec4(position.x + offsetX, position.y, 0.1, 1.0);
+        }
+      `;
+      const indicatorFShaderSrc = `
+        precision mediump float;
+        void main() {
+          gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        }
+      `;
+      this.indicatorShader = new Shader(
+        gl,
+        indicatorVShaderSrc,
+        indicatorFShaderSrc
+      );
+    }
   }
 
   private calThreshold(data: Data[], width: number): number {
@@ -208,12 +235,12 @@ export default class Line {
     // build first point
     {
       const p0 = vec2.fromValues(
-        this.xScale(this.data[0].x),
-        this.yScale(this.data[0].y)
+        this.xScale(this.smoothData[0].x),
+        this.yScale(this.smoothData[0].y)
       );
       const p1 = vec2.fromValues(
-        this.xScale(this.data[1].x),
-        this.yScale(this.data[1].y)
+        this.xScale(this.smoothData[1].x),
+        this.yScale(this.smoothData[1].y)
       );
 
       const p0p1 = vec2.sub(vec2.create(), p1, p0);
@@ -234,40 +261,30 @@ export default class Line {
         t1[1]
       );
 
-      if (t0[0] < t1[0]) {
-        overlayVertices.push(
-          // 0
-          t0[0],
-          this.frustum.bottom,
-          // 1
-          t0[0],
-          t0[1]
-        );
-      } else {
-        overlayVertices.push(
-          // 0
-          t1[0],
-          this.frustum.bottom,
-          // 1
-          t1[0],
-          t1[1]
-        );
-      }
+      const firstPoint = t0[0] < t1[0] ? t0 : t1;
+      overlayVertices.push(
+        // 0
+        firstPoint[0],
+        this.frustum.bottom,
+        // 1
+        firstPoint[0],
+        firstPoint[1]
+      );
     }
 
     // build middle points
-    for (let i = 1; i < this.data.length - 1; i++) {
+    for (let i = 1; i < this.smoothData.length - 1; i++) {
       const p0 = vec2.fromValues(
-        this.xScale(this.data[i - 1].x),
-        this.yScale(this.data[i - 1].y)
+        this.xScale(this.smoothData[i - 1].x),
+        this.yScale(this.smoothData[i - 1].y)
       );
       const p1 = vec2.fromValues(
-        this.xScale(this.data[i].x),
-        this.yScale(this.data[i].y)
+        this.xScale(this.smoothData[i].x),
+        this.yScale(this.smoothData[i].y)
       );
       const p2 = vec2.fromValues(
-        this.xScale(this.data[i + 1].x),
-        this.yScale(this.data[i + 1].y)
+        this.xScale(this.smoothData[i + 1].x),
+        this.yScale(this.smoothData[i + 1].y)
       );
 
       const p0p1 = vec2.sub(vec2.create(), p1, p0);
@@ -334,14 +351,14 @@ export default class Line {
 
     // build last point
     {
-      const i = this.data.length - 2;
+      const i = this.smoothData.length - 2;
       const p1 = vec2.fromValues(
-        this.xScale(this.data[i].x),
-        this.yScale(this.data[i].y)
+        this.xScale(this.smoothData[i].x),
+        this.yScale(this.smoothData[i].y)
       );
       const p2 = vec2.fromValues(
-        this.xScale(this.data[i + 1].x),
-        this.yScale(this.data[i + 1].y)
+        this.xScale(this.smoothData[i + 1].x),
+        this.yScale(this.smoothData[i + 1].y)
       );
       const p1p2 = vec2.sub(vec2.create(), p2, p1);
 
@@ -360,25 +377,15 @@ export default class Line {
         t5[0],
         t5[1]
       );
-      if (t4[0] < t5[0]) {
-        overlayVertices.push(
-          // 0
-          t5[0],
-          this.frustum.bottom,
-          // 1
-          t5[0],
-          t5[1]
-        );
-      } else {
-        overlayVertices.push(
-          // 0
-          t4[0],
-          this.frustum.bottom,
-          // 1
-          t4[0],
-          t4[1]
-        );
-      }
+      const lastPoint = t4[0] < t5[0] ? t5 : t4;
+      overlayVertices.push(
+        // 0
+        lastPoint[0],
+        this.frustum.bottom,
+        // 1
+        lastPoint[0],
+        lastPoint[1]
+      );
 
       lineIndices.push(
         1 + i * 2,
@@ -461,6 +468,41 @@ export default class Line {
       this.overlayVAO = overlayVAO;
       this.overlayShader.setNumOfIndices(overlayIndices.length);
     }
+
+    // indicator
+    if (this.options.onHover) {
+      const { left, right, top, bottom } = this.frustum;
+
+      const indicatorVAO = gl.createVertexArray();
+      gl.bindVertexArray(indicatorVAO);
+
+      const indicatorVBO = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, indicatorVBO);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, top, -1, 0, 1, 0, 1, top]),
+        gl.STATIC_DRAW
+      );
+
+      const indicatorEBO = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicatorEBO);
+      gl.bufferData(
+        gl.ELEMENT_ARRAY_BUFFER,
+        new Uint16Array([0, 1, 2, 0, 2, 3]),
+        gl.STATIC_DRAW
+      );
+
+      const positionLoc = gl.getAttribLocation(
+        this.indicatorShader.program,
+        "position"
+      );
+      gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(positionLoc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+      this.indicatorVAO = indicatorVAO;
+      this.indicatorShader.setNumOfIndices(6);
+    }
   }
 
   private buildMVP() {
@@ -485,6 +527,45 @@ export default class Line {
     const mvp = mat4.mul(mat4.create(), mat4.mul(mat4.create(), m, v), p);
 
     return mvp;
+  }
+
+  private bindListeners() {
+    const { canvas } = this.options;
+    canvas.addEventListener("mousemove", this.onMouseMove.bind(this));
+  }
+
+  private onMouseMove(event: MouseEvent) {
+    const { canvas, onHover } = this.options;
+    const clientRect = canvas.getBoundingClientRect();
+    const x = event.x - clientRect.left;
+    const y = event.y - clientRect.top;
+    const point = this.findClosestPoint(x * FACT);
+    if (point && point.offsetX !== this.offsetX) {
+      this.offsetX = point.offsetX;
+      this.draw();
+      onHover && onHover(point.data);
+    }
+  }
+
+  private findClosestPoint(
+    mouseX: number
+  ): { offsetX: number; data: Data } | undefined {
+    const { data } = this;
+    // linear search
+    for (let i = 0; i < data.length - 1; ++i) {
+      const x1 = this.xScale(data[i].x);
+      const x2 = this.xScale(data[i + 1].x);
+      if (x2 >= mouseX && x1 <= mouseX) {
+        // for first and last point, shift it a bit
+        const choseLeftPoint = x2 - mouseX > mouseX - x1;
+        const isFirstPoint = choseLeftPoint && i === 0;
+        const isLastPoint = !choseLeftPoint && i === data.length - 2;
+        const offset = isFirstPoint ? 1 : isLastPoint ? -1 : 0;
+        return choseLeftPoint
+          ? { offsetX: x1 + offset, data: data[i] }
+          : { offsetX: x2 + offset, data: data[i + 1] };
+      }
+    }
   }
 
   private draw() {
@@ -515,5 +596,12 @@ export default class Line {
       ])
     );
     this.overlayShader.draw(this.overlayVAO);
+
+    if (this.indicatorShader) {
+      this.indicatorShader.use();
+      this.indicatorShader.setFloat("offsetX", this.offsetX);
+      this.indicatorShader.setMat4("mvp", mvp);
+      this.indicatorShader.draw(this.indicatorVAO);
+    }
   }
 }

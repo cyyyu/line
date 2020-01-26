@@ -53,6 +53,10 @@ export default class Shader {
     this.gl.uniform2fv(this.gl.getUniformLocation(this.program, name), v);
   }
 
+  public setFloat(name: string, v: number) {
+    this.gl.uniform1f(this.gl.getUniformLocation(this.program, name), v);
+  }
+
   public setMat4(name: string, mat4: Float32Array) {
     this.gl.uniformMatrix4fv(
       this.gl.getUniformLocation(this.program, name),
