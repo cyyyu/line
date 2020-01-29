@@ -478,19 +478,13 @@ export default class Line {
 
       const indicatorVBO = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, indicatorVBO);
-      gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array([-1, top, -1, 0, 1, 0, 1, top]),
-        gl.STATIC_DRAW
-      );
+      const vertices = new Float32Array([0, top, 0, 0]);
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 
       const indicatorEBO = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicatorEBO);
-      gl.bufferData(
-        gl.ELEMENT_ARRAY_BUFFER,
-        new Uint16Array([0, 1, 2, 0, 2, 3]),
-        gl.STATIC_DRAW
-      );
+      const indices = new Uint16Array([0, 1]);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
 
       const positionLoc = gl.getAttribLocation(
         this.indicatorShader.program,
@@ -501,7 +495,7 @@ export default class Line {
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
       this.indicatorVAO = indicatorVAO;
-      this.indicatorShader.setNumOfIndices(6);
+      this.indicatorShader.setNumOfIndices(2);
     }
   }
 
@@ -601,7 +595,7 @@ export default class Line {
       this.indicatorShader.use();
       this.indicatorShader.setFloat("offsetX", this.offsetX);
       this.indicatorShader.setMat4("mvp", mvp);
-      this.indicatorShader.draw(this.indicatorVAO);
+      this.indicatorShader.draw(this.indicatorVAO, gl.LINE_STRIP);
     }
   }
 }

@@ -69,10 +69,15 @@ export default class Shader {
     this.numOfIndices = n;
   }
 
-  public draw(buffer: WebGLVertexArrayObject) {
+  public draw(buffer: WebGLVertexArrayObject, type?: GLenum) {
     const { gl } = this;
     gl.bindVertexArray(buffer);
-    gl.drawElements(gl.TRIANGLES, this.numOfIndices, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(
+      type || gl.TRIANGLES,
+      this.numOfIndices,
+      gl.UNSIGNED_SHORT,
+      0
+    );
     gl.bindVertexArray(null);
   }
 }
