@@ -13,16 +13,16 @@ export interface Options {
 }
 
 // constants
-const THICKNESS = 3.2;
+const THICKNESS = 2.4;
 const LINE_COLOR: Color = {
-  r: 217,
-  g: 21,
-  b: 78
+  r: 255,
+  g: 30,
+  b: 30
 };
 const BG_COLOR: Color = {
-  r: 250,
-  g: 250,
-  b: 250
+  r: 255,
+  g: 255,
+  b: 255
 };
 const FACT = 2;
 
@@ -159,8 +159,8 @@ export default class Line {
     `;
     const lineFShaderSrc = `
       precision highp float;
-      vec3 lineColor = vec3(${color!.r / 250.0}, ${color!.g / 250.0}, ${color!
-      .b / 250.0});
+      vec3 lineColor = vec3(${color!.r / 255.0}, ${color!.g / 255.0}, ${color!
+      .b / 255.0});
       void main() {
         gl_FragColor = vec4(lineColor, 1.0);
       }
@@ -178,11 +178,11 @@ export default class Line {
     const overlayFShaderSrc = `
       precision mediump float;
       uniform vec2 resolution;
-      vec3 bg = vec3(${backgroundColor!.r / 250.0}, ${backgroundColor!.g /
-      250.0}, ${backgroundColor!.b / 250.0});
+      vec3 bg = vec3(${backgroundColor.r / 255.0}, ${backgroundColor.g /
+      255.0}, ${backgroundColor.b / 255.0});
       void main() {
         vec2 st = gl_FragCoord.xy / resolution;
-        float c = smoothstep(1.2, 0.0, st.y);
+        float c = smoothstep(2.0, 0.0, st.y);
         gl_FragColor = vec4(c * bg, 1.0);
       }
     `;
@@ -478,13 +478,36 @@ export default class Line {
 
       const indicatorVBO = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, indicatorVBO);
-      const vertices = new Float32Array([0, top, 0, 0]);
-      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+      // build dashed line
+      const vertices = [];
+      const indices = [];
+      const gapLength = 4 * FACT;
+      const lineLength = 2 * FACT;
+      const numOfSegments = Math.round(
+        (top - bottom) / (gapLength + lineLength)
+      );
+      for (let i = 0; i < numOfSegments; i++) {
+        vertices.push(0, i * (gapLength + lineLength) + gapLength / 2); // bottom
+        vertices.push(
+          0,
+          i * (gapLength + lineLength) + gapLength / 2 + lineLength
+        ); // top
+        indices.push(i * 2 + 0, i * 2 + 1);
+      }
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        Float32Array.from(vertices),
+        gl.STATIC_DRAW
+      );
 
       const indicatorEBO = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicatorEBO);
-      const indices = new Uint16Array([0, 1]);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+      gl.bufferData(
+        gl.ELEMENT_ARRAY_BUFFER,
+        Uint16Array.from(indices),
+        gl.STATIC_DRAW
+      );
 
       const positionLoc = gl.getAttribLocation(
         this.indicatorShader.program,
@@ -495,7 +518,7 @@ export default class Line {
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
       this.indicatorVAO = indicatorVAO;
-      this.indicatorShader.setNumOfIndices(2);
+      this.indicatorShader.setNumOfIndices(indices.length);
     }
   }
 
@@ -595,7 +618,7 @@ export default class Line {
       this.indicatorShader.use();
       this.indicatorShader.setFloat("offsetX", this.offsetX);
       this.indicatorShader.setMat4("mvp", mvp);
-      this.indicatorShader.draw(this.indicatorVAO, gl.LINE_STRIP);
+      this.indicatorShader.draw(this.indicatorVAO, gl.LINES);
     }
   }
 }
