@@ -10,10 +10,10 @@ export interface Options {
   backgroundColor?: Color;
   downsample?: boolean | number;
   onHover?: (d: Data) => void;
+  lineWidth?: number;
 }
 
 // constants
-const THICKNESS = 2.4;
 const LINE_COLOR: Color = {
   r: 255,
   g: 30,
@@ -29,7 +29,8 @@ const FACT = 2;
 const DefaultOptions: Partial<Options> = {
   downsample: true,
   color: LINE_COLOR,
-  backgroundColor: BG_COLOR
+  backgroundColor: BG_COLOR,
+  lineWidth: 2.4
 };
 
 export default class Line {
@@ -226,6 +227,7 @@ export default class Line {
   // build vertics and indices that form the line segments
   private buildObjects() {
     const { gl } = this;
+    const { lineWidth } = this.options;
 
     const lineVertices: number[] = [];
     const lineIndices: number[] = [];
@@ -249,7 +251,7 @@ export default class Line {
         vec2.fromValues(-p0p1[1], p0p1[0])
       );
 
-      const t = vec2.fromValues(normal[0] * THICKNESS, normal[1] * THICKNESS);
+      const t = vec2.fromValues(normal[0] * lineWidth, normal[1] * lineWidth);
       const t0 = vec2.sub(vec2.create(), p0, t);
       const t1 = vec2.add(vec2.create(), p0, t);
       lineVertices.push(
@@ -301,7 +303,7 @@ export default class Line {
         vec2.fromValues(-p0p1[1], p0p1[0])
       );
 
-      const len = THICKNESS / vec2.dot(miter, normal0);
+      const len = lineWidth / vec2.dot(miter, normal0);
 
       const t2 = vec2.sub(
         vec2.create(),
@@ -366,7 +368,7 @@ export default class Line {
         vec2.create(),
         vec2.fromValues(-p1p2[1], p1p2[0])
       );
-      const t = vec2.fromValues(normal[0] * THICKNESS, normal[1] * THICKNESS);
+      const t = vec2.fromValues(normal[0] * lineWidth, normal[1] * lineWidth);
       const t4 = vec2.sub(vec2.create(), p2, t);
       const t5 = vec2.add(vec2.create(), p2, t);
       lineVertices.push(
