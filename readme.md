@@ -2,11 +2,16 @@
 
 [![npm version](https://badge.fury.io/js/simple-line-chart.svg)](https://badge.fury.io/js/simple-line-chart)
 
-Dead simple line chart in webgl. <a href="https://codesandbox.io/s/0pq5v6j1qp?fontsize=14" target="_blank">Demo</a>
+Dead simple line chart in webgl. 
 
 `4.8KB` after gzip.
 
-<img style="margin:0 auto;" src="./imgs/screenshot.jpg" width="480" />
+<img style="margin:0 auto;" src="./imgs/screenshot.jpg" width="320" />
+
+## Demo
+
+* <a href="https://codesandbox.io/embed/0pq5v6j1qp?fontsize=14&hidenavigation=1&theme=dark" target="_blank">Demo1</a>
+* <a href="https://codesandbox.io/embed/ecstatic-sun-ekp8p?fontsize=14&hidenavigation=1&theme=dark" target="_blank">Demo2</a>
 
 ## Install
 
